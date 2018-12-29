@@ -1,0 +1,54 @@
+class_name: AcceptanceTester
+modules:
+    enabled:
+        - WPDb
+        - WPWebDriver
+        - Asserts
+        - \Helper\Acceptance
+    config:
+        WPDb:
+            dsn: 'mysql:host=localhost;dbname=wordpress'
+            user: 'wordpressuser'
+            password: 'password'
+            dump: 'wordpress.sql'
+            populate: false
+            cleanup: false
+            url: 'http://localhost'
+            urlReplacement: false
+            tablePrefix: 'wp_'
+        WPWebDriver:
+            url: 'http://localhost'
+            adminUsername: 'admin'
+            adminPassword: 'password'
+            adminPath: '/wp-admin'
+            port: 4444
+            #browser: phantomjs #./phantomjs --webdriver=4444
+            browser: chrome #java -jar selenium.jar
+            window_size: maximize
+env:
+    localhost:
+         modules:
+            config:
+                WPWebDriver:
+                    browser: 'chrome'
+                    url: 'http://localhost'
+                    adminUsername: 'admin'
+                    adminPassword: 'password'
+                    adminPath: '/wp-admin'
+                    port: 4444
+                    #browser: phantomjs #./phantomjs --webdriver=4444
+                    browser: chrome #java -jar selenium.jar
+                    window_size: maximize
+    remotehost:
+         modules:
+            config:
+                WPWebDriver:
+                    browser: 'chrome'
+                    url: 'http://wp.dev'
+                    adminUsername: 'admin'
+                    adminPassword: 'password'
+                    adminPath: '/wp-admin'
+                    port: 4444
+                    #browser: phantomjs #./phantomjs --webdriver=4444
+                    browser: chrome #java -jar selenium.jar
+                    window_size: maximize
