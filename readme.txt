@@ -17,8 +17,12 @@ This plugin restores the functionality as it was before version 4.9 on single si
 ## Usage
 Once activated, you do not need to do anything. You can change the admin email without outbound email traffic. 
 
+== Screenshots ==
+1. The general settings screen before WordPress version 4.9
+2. The general settings screen after WordPress ersion 4.9
+
 == Development ==
-## BDD Testing Bonus for Developers
+## Behavior Driven Developent Testing Bonus for Developers
 This plugin is distributed with Behavior Driven Development tests written for Codeception. Visit [GeneralChicken.net](https://generalchicken.netm) for more information.
 
 == Installation ==
