@@ -9,7 +9,7 @@ License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 Stable tag: trunk
 
-As of WordPress 4.9, the administrator cannot change the site admin email without outgoing mail setup on the server, and recipient email credentials. This plugin restores the admin\'s ability to change this setting without sending a confirmation email.
+A ne wfeature of WordPress 4.9, the administrator cannot change the site admin email without outgoing mail setup on the server, and recipient email credentials. This plugin restores the admin\'s ability to change this setting without sending a confirmation email.
 
 == Description ==
 This plugin restores the functionality as it was before version 4.9 on single sites. This may be required on sites without email access or for testing purposes, i.e. on localhost. It does not effect the API at all.

@@ -3,7 +3,7 @@
  Plugin Name: Change Admin Email Setting Without Outbound Email
  Plugin URI: https://generalchicken.net/change-admin-email/
  Description: Restores functionality removed since WordPress 4.9. Allows the changing of the admin email by admins in single site without outbound email or recipient email credentials.
- Version: 1.5
+ Version: 1.6
  Author: John Dee
  Author URI: https://generalchicken.net/
 */
