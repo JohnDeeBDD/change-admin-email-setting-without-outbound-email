@@ -1,0 +1,8 @@
+{
+  "require-dev": {
+    "lucatume/wp-browser": "*"
+  },
+  "config": {
+    "bin-dir": "bin"
+  }
+}

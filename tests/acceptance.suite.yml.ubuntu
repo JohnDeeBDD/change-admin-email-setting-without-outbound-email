@@ -4,7 +4,6 @@ modules:
     - \Helper\Acceptance
     - WPDb
     - WPWebDriver
-    - Asserts
     - WPCLI
     - WPLoader
   config:
@@ -39,7 +38,7 @@ modules:
       url: 'http://ec2-52-90-97-71.compute-1.amazonaws.com/'
       window_size: 800,480
       adminUsername: 'admin'
-      adminPassword: 'g)EgtChmkQ4*RoQX@peY45Bt'
+      adminPassword: 'password'
       adminPath: /wp-admin
       port: 4444 #chromedriver --url-base=/wd/hub
       #browser: phantomjs #./phantomjs --webdriver=4444
