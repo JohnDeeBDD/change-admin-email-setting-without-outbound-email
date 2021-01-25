@@ -121,14 +121,11 @@ class Cookie
     /**
      * Creates a Cookie instance from a Set-Cookie header value.
      *
-     * @param string      $cookie A Set-Cookie header value
-     * @param string|null $url    The base URL
-     *
      * @return static
      *
      * @throws \InvalidArgumentException
      */
-    public static function fromString($cookie, $url = null)
+    public static function fromString(string $cookie, string $url = null)
     {
         $parts = explode(';', $cookie);
 
@@ -136,7 +133,7 @@ class Cookie
             throw new \InvalidArgumentException(sprintf('The cookie string "%s" is not valid.', $parts[0]));
         }
 
-        list($name, $value) = explode('=', array_shift($parts), 2);
+        [$name, $value] = explode('=', array_shift($parts), 2);
 
         $values = [
             'name' => trim($name),
@@ -309,7 +306,7 @@ class Cookie
      */
     public function isExpired()
     {
-        return null !== $this->expires && 0 != $this->expires && $this->expires < time();
+        return null !== $this->expires && 0 != $this->expires && $this->expires <= time();
     }
 
     /**

@@ -3,7 +3,7 @@
  Plugin Name: Change Admin Email Mothership
  Plugin URI: https://generalchicken.net/change-admin-email/
  Description: Restores functionality removed since WordPress 4.9. Allows the changing of the admin email by admins in single site without outbound email or recipient email credentials.
- Version: 2.0
+ Version: 3
  Author: John Dee
  Author URI: https://generalchicken.net/
 */

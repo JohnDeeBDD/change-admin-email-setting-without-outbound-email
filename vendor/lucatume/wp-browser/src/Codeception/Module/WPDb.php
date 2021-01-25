@@ -2,13 +2,14 @@
 
 namespace Codeception\Module;
 
+use Codeception\Exception\ModuleConfigException;
 use Codeception\Exception\ModuleException;
 use Codeception\Exception\ModuleRequireException;
 use Codeception\Lib\ModuleContainer;
 use Gumlet\ImageResize;
 use Gumlet\ImageResizeException;
 use PDO;
-use tad\WPBrowser\Filesystem\Utils;
+use tad\WPBrowser\Exceptions\DumpException;
 use tad\WPBrowser\Generators\Blog;
 use tad\WPBrowser\Generators\Comment;
 use tad\WPBrowser\Generators\Links;
@@ -17,9 +18,20 @@ use tad\WPBrowser\Generators\Tables;
 use tad\WPBrowser\Generators\User;
 use tad\WPBrowser\Generators\WpPassword;
 use tad\WPBrowser\Module\Support\DbDump;
+use tad\WPBrowser\Traits\WithEvents;
+use function tad\WPBrowser\db;
+use function tad\WPBrowser\dbDsnString;
+use function tad\WPBrowser\dbDsnToMap;
 use function tad\WPBrowser\ensure;
 use function tad\WPBrowser\renderString;
+use function tad\WPBrowser\requireCodeceptionModules;
 use function tad\WPBrowser\slug;
+use function tad\WPBrowser\unleadslashit;
+use function tad\WPBrowser\untrailslashit;
+
+//phpcs:disable
+requireCodeceptionModules('WPDb', [ 'Db' ]);
+//phpcs:enable
 
 /**
  * An extension of Codeception Db class to add WordPress database specific
@@ -27,6 +39,13 @@ use function tad\WPBrowser\slug;
  */
 class WPDb extends Db
 {
+    use WithEvents;
+
+    const EVENT_BEFORE_SUITE = 'WPDb.before_suite';
+    const EVENT_BEFORE_INITIALIZE = 'WPDb.before_initialize';
+    const EVENT_AFTER_INITIALIZE = 'WPDb.after_initialize';
+    const EVENT_AFTER_DB_PREPARE =  'WPDb.after_db_prepare';
+    const ADMIN_EMAIL_LIFESPAN = 2533080438;
 
     /**
      * @var \tad\WPBrowser\Module\Support\DbDump
@@ -34,37 +53,51 @@ class WPDb extends Db
     protected $dbDump;
 
     /**
-     * @var string The theme stylesheet in use.
+     * The theme stylesheet in use.
+     *
+     * @var string
      */
     protected $stylesheet = '';
 
     /**
-     * @var array
+     * The current theme menus.
+     *
+     * @var array<array<string,mixed>>
      */
     protected $menus = [];
 
     /**
-     * @var array
+     * The current menu items, per menu.
+     *
+     * @var array<array<string,mixed>>
      */
     protected $menuItems = [];
 
     /**
+     * The placeholder that will be replaced with the iteration number when found in strings.
+     *
      * @var string
      */
     protected $numberPlaceholder = '{{n}}';
 
     /**
-     * @var array
+     * The legit keys to term criteria.
+     *
+     * @var array<string>
      */
     protected $termKeys = ['term_id', 'name', 'slug', 'term_group'];
 
     /**
-     * @var array
+     * The legit keys for the term taxonomy criteria.
+     *
+     * @var array<string>
      */
     protected $termTaxonomyKeys = ['term_taxonomy_id', 'term_id', 'taxonomy', 'description', 'parent', 'count'];
 
     /**
-     * @var array A list of tables that WordPress will nor replicate in multisite installations.
+     * A list of tables that WordPress will nor replicate in multisite installations.
+     *
+     * @var array<string>
      */
     protected $uniqueTables = [
         'blogs',
@@ -80,16 +113,14 @@ class WPDb extends Db
     /**
      * The module required configuration parameters.
      *
-     * url - the site url
-     *
-     * @var array
+     * @var array<string>
      */
     protected $requiredFields = ['url'];
 
     /**
      * The module optional configuration parameters.
      *
-     * @var array
+     * @var array<string,mixed>
      */
     protected $config = [
         'tablePrefix' => 'wp_',
@@ -99,6 +130,7 @@ class WPDb extends Db
         'dump' => null,
         'populator' => null,
         'urlReplacement' => true,
+        'originalUrl' => null,
         'waitlock' => 10,
     ];
 
@@ -120,28 +152,18 @@ class WPDb extends Db
     protected $tables;
 
     /**
-     * @var array
+     * The current template data.
+     *
+     * @var array<string,mixed>
      */
     protected $templateData;
 
     /**
-     * @var array Stores the keys of the databases the dump of which was
-     *            already replaced.
-     */
-    protected $urlReplacedDumpsDatabaseKeys = [];
-
-    /**
-     * @var int[] An array containing the blog IDs of the sites scaffolded
-     *            by the module.
+     * An array containing the blog IDs of the sites scaffolded by the module.
+     *
+     * @var array<int>
      */
     protected $scaffoldedBlogIds;
-
-    /**
-     * Whether the current database belongs to a multisite installation or not.
-     *
-     * @var bool
-     */
-    protected $isMultisite;
 
     /**
      * Whether the module did init already or not.
@@ -168,8 +190,10 @@ class WPDb extends Db
      * WPDb constructor.
      *
      * @param ModuleContainer $moduleContainer The module container handling the suite modules.
-     * @param null|array            $config The module configuration
+     * @param array<string,mixed>|null            $config The module configuration
      * @param DbDump|null     $dbDump The database dump handler.
+     *
+     * @return void
      */
     public function __construct(ModuleContainer $moduleContainer, $config = null, DbDump $dbDump = null)
     {
@@ -181,13 +205,32 @@ class WPDb extends Db
      * Initializes the module.
      *
      * @param Tables $table An instance of the tables management object.
+     *
+     * @return void
      */
     public function _initialize(Tables $table = null)
     {
+        /**
+         * Dispatches an event before the WPDb module initializes.
+         *
+         * @param WPDb $this The current module instance.
+         */
+        $this->doAction(static::EVENT_BEFORE_INITIALIZE, $this);
+
+        $this->createDatabasesIfNotExist($this->config);
+
         parent::_initialize();
+
         $this->tablePrefix = $this->config['tablePrefix'];
         $this->tables = $table ?: new Tables();
         $this->didInit = true;
+
+        /**
+         * Dispatches an event after the WPDb module has initialized.
+         *
+         * @param WPDb $this The current module instance.
+         */
+        $this->doAction(static::EVENT_AFTER_INITIALIZE, $this);
     }
 
     /**
@@ -201,7 +244,9 @@ class WPDb extends Db
      *
      * Specifying a dump file that file will be imported.
      *
-     * @param null|string $dumpFile The dump file that should be imported in place of the default one.
+     * @param string|null $dumpFile The dump file that should be imported in place of the default one.
+     *
+     * @return void
      *
      * @throws \InvalidArgumentException If the specified file does not exist.
      */
@@ -224,6 +269,16 @@ class WPDb extends Db
         }
     }
 
+    /**
+     * Cleans up the database.
+     *
+     * @param string|null $databaseKey The key of the database to clean up.
+     * @param array<string,mixed>|null $databaseConfig The configuration of the database to clean up.
+     *
+     * @return void
+     *
+     * @throws ModuleException|ModuleConfigException If there's a configuration or operation issue.
+     */
     public function _cleanup($databaseKey = null, $databaseConfig = null)
     {
         parent::_cleanup($databaseKey, $databaseConfig);
@@ -239,16 +294,21 @@ class WPDb extends Db
      * ```php
      * $I->dontHaveOptionInDatabase('posts_per_page');
      * $I->dontSeeOptionInDatabase('posts_per_page');
+     * $I->dontSeeOptionInDatabase('posts_per_page', 23);
+     * $I->dontSeeOptionInDatabase(['option_name' => 'posts_per_page']);
+     * $I->dontSeeOptionInDatabase(['option_name' => 'posts_per_page', 'option_value' => 23]);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed>|string $criteriaOrName An array of search criteria or the option name.
+     * @param mixed|null $value The optional value to try and match, only used if the option name is provided.
+     *
+     * @return void
      */
-    public function dontSeeOptionInDatabase(array $criteria)
+    public function dontSeeOptionInDatabase($criteriaOrName, $value = null)
     {
+        $criteria = $this->normalizeOptionCriteria($criteriaOrName, $value);
         $tableName = $this->grabPrefixedTableNameFor('options');
-        if (!empty($criteria['option_value'])) {
-            $criteria['option_value'] = $this->maybeSerialize($criteria['option_value']);
-        }
+
         $this->dontSeeInDatabase($tableName, $criteria);
     }
 
@@ -307,7 +367,9 @@ class WPDb extends Db
      * $I->seePostMetaInDatabase(['post_id' => '$postId', 'meta_key' => 'foo']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seePostMetaInDatabase(array $criteria)
     {
@@ -329,7 +391,9 @@ class WPDb extends Db
      * $I->seeLinkInDatabase(['link_owner' => $userId]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeLinkInDatabase(array $criteria)
     {
@@ -346,7 +410,9 @@ class WPDb extends Db
      * $I->dontSeeLinkInDatabase(['link_url' => 'http://example.com', 'link_name' => 'example']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeeLinkInDatabase(array $criteria)
     {
@@ -365,7 +431,9 @@ class WPDb extends Db
      * $I->dontSeePostMetaInDatabase(['post_id' => $postId, 'meta_key' => 'woot']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeePostMetaInDatabase(array $criteria)
     {
@@ -397,6 +465,9 @@ class WPDb extends Db
      *                                         term order.
      * @param  string|null  $taxonomy          The taxonomy the `term_id` is for; if passed this parameter will be used
      *                                         to build a `taxonomy_term_id` from the `term_id`.
+     *
+     * @return void
+     *
      * @throws ModuleException If a `term_id` is specified but it cannot be matched to the `taxonomy`.
      */
     public function seePostWithTermInDatabase($post_id, $term_taxonomy_id, $term_order = null, $taxonomy = null)
@@ -441,7 +512,9 @@ class WPDb extends Db
      * ])
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeUserInDatabase(array $criteria)
     {
@@ -471,7 +544,9 @@ class WPDb extends Db
      * $I->dontSeeUserInDatabase(['user_login' => 'luca', 'user_email' => 'luca@theaveragedev.com']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeeUserInDatabase(array $criteria)
     {
@@ -503,7 +578,7 @@ class WPDb extends Db
      * $testPageId = $I->havePageInDatabase(['post_title' => 'Test page']);
      * ```
      *
-     * @param array $overrides An array of values to override the default ones.
+     * @param array<string,mixed> $overrides An array of values to override the default ones.
      *
      * @return int The inserted page post ID.
      *
@@ -519,33 +594,37 @@ class WPDb extends Db
     /**
      * Inserts a post in the database.
      *
+     * @param array<int|string,mixed> $data An associative array of post data to override default and random generated
+     *                                  values.
+     *
+     * @return int post_id The inserted post ID.
+     *
+     * @throws \Exception If there's an exception during the insertion.
+     *
      * @example
      * ```php
      * // Insert a post with random values in the database.
      * $randomPostId = $I->havePostInDatabase();
      * // Insert a post with specific values in the database.
      * $I->havePostInDatabase([
-     *         'post_type' => 'book',
-     *         'post_title' => 'Alice in Wonderland',
-     *         'meta_input' => [
-     *              'readers_count' => 23
-     *          ],
-     *         'tax_input' => [
-     *              ['genre' => 'fiction']
-     *          ]
+     * 'post_type' => 'book',
+     * 'post_title' => 'Alice in Wonderland',
+     * 'meta_input' => [
+     * 'readers_count' => 23
+     * ],
+     * 'tax_input' => [
+     * ['genre' => 'fiction']
+     * ]
      * ]);
      * ```
      *
-     * @param  array $data An associative array of post data to override default and random generated values.
-     *
-     * @return int post_id The inserted post ID.
      */
     public function havePostInDatabase(array $data = [])
     {
         $postTableName = $this->grabPostsTableName();
         $idColumn = 'ID';
         $id = $this->grabLatestEntryByFromDatabase($postTableName, $idColumn) + 1;
-        $post = Post::makePost($id, $this->config['url'], $data);
+        $post = Post::buildPostData($id, $this->config['url'], $data);
         $hasMeta = !empty($data['meta']) || !empty($data['meta_input']);
         $hasTerms = !empty($data['terms']) || !empty($data['tax_input']);
 
@@ -627,6 +706,7 @@ class WPDb extends Db
 
     /**
      * Returns the id value of the last table entry.
+     *
      * @example
      * ```php
      * $I->haveManyPostsInDatabase();
@@ -721,7 +801,7 @@ class WPDb extends Db
      * $termId = $I->grabTermIdFromDatabase(['term_group' => 23]);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
      *
      * @return int The matching term `term_id`
      */
@@ -767,9 +847,9 @@ class WPDb extends Db
      *
      * @param  string $name      The term name, e.g. "Fuzzy".
      * @param string  $taxonomy  The term taxonomy
-     * @param array   $overrides An array of values to override the default ones.
+     * @param array<int|string,mixed>   $overrides An array of values to override the default ones.
      *
-     * @return array An array containing `term_id` and `term_taxonomy_id` of the inserted term.
+     * @return array<int> An array containing `term_id` and `term_taxonomy_id` of the inserted term.
      */
     public function haveTermInDatabase($name, $taxonomy, array $overrides = [])
     {
@@ -890,7 +970,7 @@ class WPDb extends Db
      * $I->grabTermTaxonomyIdFromDatabase(['count' => 23]);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
      *
      * @return int The matching term `term_taxonomy_id`
      */
@@ -914,6 +994,8 @@ class WPDb extends Db
      * @param int $object_id  A post ID, a user ID or anything that can be assigned a taxonomy term.
      * @param int $term_taxonomy_id The `term_taxonomy_id` of the term and taxonomy to create a relation with.
      * @param int $term_order Defaults to `0`.
+     *
+     * @return void
      */
     public function haveTermRelationshipInDatabase($object_id, $term_taxonomy_id, $term_order = 0)
     {
@@ -939,12 +1021,22 @@ class WPDb extends Db
         return $this->grabPrefixedTableNameFor('term_relationships');
     }
 
-    private function increaseTermCountBy($termTaxonomyId, $by = 1)
+    /**
+     * Increases the term counter.
+     *
+     * @param    int $termTaxonomyId The ID of the term to increase the count for.
+     * @param int $by The value to increase the count by.
+     *
+     * @return bool Whether the update happened correctly or not.
+     *
+     * @throws \Exception If there's any error during the update.
+     */
+    protected function increaseTermCountBy($termTaxonomyId, $by = 1)
     {
-        $updateQuery = "UPDATE {$this->grabTermTaxonomyTableName()} SET count = count + {$by} 
+        $updateQuery = "UPDATE {$this->grabTermTaxonomyTableName()} SET count = count + {$by}
           WHERE term_taxonomy_id = {$termTaxonomyId}";
 
-        return $this->_getDriver()->executeQuery($updateQuery, []);
+        return (bool)$this->_getDriver()->executeQuery($updateQuery, []);
     }
 
     /**
@@ -958,7 +1050,9 @@ class WPDb extends Db
      * $I->seePageInDatabase(['post_title' => 'Test Page', 'ID' => 23]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seePageInDatabase(array $criteria)
     {
@@ -977,7 +1071,9 @@ class WPDb extends Db
      * $I->seePostInDatabase(['post_content' => 'test content', 'ID' => 23]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seePostInDatabase(array $criteria)
     {
@@ -996,7 +1092,9 @@ class WPDb extends Db
      * $I->dontSeePageInDatabase(['post_name' => 'test', 'ID' => 23]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeePageInDatabase(array $criteria)
     {
@@ -1015,7 +1113,9 @@ class WPDb extends Db
      * $I->dontSeePostInDatabase(['post_title' => 'Test', 'post_content' => 'Test content']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeePostInDatabase(array $criteria)
     {
@@ -1033,7 +1133,9 @@ class WPDb extends Db
      * $I->seeCommentInDatabase(['comment_ID' => 23]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeCommentInDatabase(array $criteria)
     {
@@ -1054,7 +1156,9 @@ class WPDb extends Db
      * $I->dontSeeCommentInDatabase(['user_id' => 89]);
      * ```
      *
-     * @param  array $criteria The serach criteria.
+     * @param  array<string,mixed> $criteria The search criteria.
+     *
+     * @return void
      */
     public function dontSeeCommentInDatabase(array $criteria)
     {
@@ -1074,11 +1178,16 @@ class WPDb extends Db
      * $I->seeCommentMetaInDatabase(['comment_ID' => $commentId]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeCommentMetaInDatabase(array $criteria)
     {
         $tableName = $this->grabPrefixedTableNameFor('commentmeta');
+        if (!empty($criteria['meta_value'])) {
+            $criteria['meta_value'] = $this->maybeSerialize($criteria['meta_value']);
+        }
         $this->seeInDatabase($tableName, $criteria);
     }
 
@@ -1095,11 +1204,16 @@ class WPDb extends Db
      * $I->dontSeeCommentMetaInDatabase(['comment_id' => 23]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeeCommentMetaInDatabase(array $criteria)
     {
         $tableName = $this->grabPrefixedTableNameFor('commentmeta');
+        if (!empty($criteria['meta_value'])) {
+            $criteria['meta_value'] = $this->maybeSerialize($criteria['meta_value']);
+        }
         $this->dontSeeInDatabase($tableName, $criteria);
     }
 
@@ -1111,11 +1225,16 @@ class WPDb extends Db
      * $I->seeUserMetaInDatabase(['user_id' => 23, 'meta_key' => 'karma']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeUserMetaInDatabase(array $criteria)
     {
         $tableName = $this->grabPrefixedTableNameFor('usermeta');
+        if (!empty($criteria['meta_value'])) {
+            $criteria['meta_value'] = $this->maybeSerialize($criteria['meta_value']);
+        }
         $this->seeInDatabase($tableName, $criteria);
     }
 
@@ -1130,11 +1249,16 @@ class WPDb extends Db
      * $I->dontSeeUserMetaInDatabase(['meta_key' => 'karma']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeeUserMetaInDatabase(array $criteria)
     {
         $tableName = $this->grabPrefixedTableNameFor('usermeta');
+        if (!empty($criteria['meta_value'])) {
+            $criteria['meta_value'] = $this->maybeSerialize($criteria['meta_value']);
+        }
         $this->dontSeeInDatabase($tableName, $criteria);
     }
 
@@ -1146,7 +1270,9 @@ class WPDb extends Db
      * $I->dontHaveLinkInDatabase(['link_url' => 'http://example.com']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontHaveLinkInDatabase(array $criteria)
     {
@@ -1157,13 +1283,16 @@ class WPDb extends Db
     /**
      * Deletes a database entry.
      *
+     * @param string              $table    The table name.
+     * @param array<string,mixed> $criteria An associative array of the column names and values to use as deletion
+     *                                      criteria.
+     *
+     * @return void
      * @example
      * ```php
      * $I->dontHaveInDatabase('custom_table', ['book_ID' => 23, 'book_genre' => 'fiction']);
      * ```
      *
-     * @param  string $table    The table name.
-     * @param  array  $criteria An associative array of the column names and values to use as deletion criteria.
      */
     public function dontHaveInDatabase($table, array $criteria)
     {
@@ -1185,7 +1314,9 @@ class WPDb extends Db
      * $I->dontHaveTermMetaInDatabase(['object_id' => $postId]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontHaveTermRelationshipInDatabase(array $criteria)
     {
@@ -1204,7 +1335,9 @@ class WPDb extends Db
      * $I->dontHaveTermTaxonomyInDatabase(['taxonomy' => 'genre']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontHaveTermTaxonomyInDatabase(array $criteria)
     {
@@ -1223,7 +1356,9 @@ class WPDb extends Db
      * $I->dontHaveUserMetaInDatabase(['user_id' => 23]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontHaveUserMetaInDatabase(array $criteria)
     {
@@ -1245,7 +1380,7 @@ class WPDb extends Db
      * @param int    $userId The ID of th user to get the meta for.
      * @param string $meta_key The meta key to fetch the value for.
      *
-     * @return array An associative array of meta key/values.
+     * @return array<string,mixed> An associative array of meta key/values.
      *
      * @throws \Exception If the search criteria is incoherent.
      */
@@ -1271,9 +1406,9 @@ class WPDb extends Db
      *
      * @param string $table The table to grab the values from.
      * @param string $column The column to fetch.
-     * @param array  $criteria The search criteria.
+     * @param array<string,mixed>  $criteria The search criteria.
      *
-     * @return array An array of results.
+     * @return array<string,mixed> An array of results.
      *
      * @throws \Exception If the criteria is inconsistent.
      */
@@ -1349,10 +1484,12 @@ class WPDb extends Db
      * ```
      *
      * @param string $transient The name of the transient to delete.
+     *
+     * @return void
      */
     public function dontHaveTransientInDatabase($transient)
     {
-        return $this->dontHaveOptionInDatabase('_transient_' . $transient);
+        $this->dontHaveOptionInDatabase('_transient_' . $transient);
     }
 
     /**
@@ -1367,7 +1504,9 @@ class WPDb extends Db
      * ```
      *
      * @param string     $key   The option name.
-     * @param null|mixed $value If set the option will only be removed if its value matches the passed one.
+     * @param mixed|null $value If set the option will only be removed if its value matches the passed one.
+     *
+     * @return void
      */
     public function dontHaveOptionInDatabase($key, $value = null)
     {
@@ -1415,6 +1554,8 @@ class WPDb extends Db
      * // Switch back to the main blog.
      * $I->useMainBlog();
      * ```
+     *
+     * @return void
      */
     public function useMainBlog()
     {
@@ -1435,6 +1576,8 @@ class WPDb extends Db
      * ```
      *
      * @param int $blogId The ID of the blog to use.
+     *
+     * @return void
      */
     public function useBlog($blogId = 0)
     {
@@ -1456,7 +1599,9 @@ class WPDb extends Db
      * ```
      *
      * @param string $key The option name.
-     * @param null|mixed $value If set the option will only be removed it its value matches the specified one.
+     * @param mixed|null $value If set the option will only be removed it its value matches the specified one.
+     *
+     * @return void
      */
     public function dontHaveSiteOptionInDatabase($key, $value = null)
     {
@@ -1501,6 +1646,8 @@ class WPDb extends Db
      * ```
      *
      * @param string $key The name of the transient to delete.
+     *
+     * @return void
      */
     public function dontHaveSiteTransientInDatabase($key)
     {
@@ -1520,7 +1667,7 @@ class WPDb extends Db
      *
      * @param string $key The name of the option to read from the database.
      *
-     * @return mixed|string The value of the option stored in the database, unserialized if serialized.
+     * @return string|mixed The value of the option stored in the database, unserialized if serialized.
      */
     public function grabSiteOptionFromDatabase($key)
     {
@@ -1542,7 +1689,7 @@ class WPDb extends Db
      *
      * @param string $option_name The name of the option to grab from the database.
      *
-     * @return mixed|string The option value. If the value is serialized it will be unserialized.
+     * @return mixed The option value. If the value is serialized it will be unserialized.
      */
     public function grabOptionFromDatabase($option_name)
     {
@@ -1552,7 +1699,15 @@ class WPDb extends Db
         return empty($option_value) ? '' : $this->maybeUnserialize($option_value);
     }
 
-    private function maybeUnserialize($value)
+    /**
+     * Unserializes serialized values.
+      @since TBD
+     *
+     * @param mixed $value The value to a
+     *
+     * @return mixed The unserialized value.
+     */
+    protected function maybeUnserialize($value)
     {
         $unserialized = @unserialize($value);
 
@@ -1595,6 +1750,8 @@ class WPDb extends Db
      *
      * @param string     $key The name of the transient to check for, w/o the `_site_transient_` prefix.
      * @param mixed|null $value If provided then the assertion will include the value.
+     *
+     * @return void
      */
     public function seeSiteSiteTransientInDatabase($key, $value = null)
     {
@@ -1608,7 +1765,8 @@ class WPDb extends Db
     }
 
     /**
-     * Checks if an option is in the database for the current blog.
+     * Checks if an option is in the database for the current blog, either by criteria or by name and value.
+     *
      * If checking for an array or an object then the serialized version will be checked for.
      *
      * @example
@@ -1617,16 +1775,19 @@ class WPDb extends Db
      * $I->seeOptionInDatabase('tables_version');
      * // Checks an option is in the database and has a specific value.
      * $I->seeOptionInDatabase('tables_version', '1.0');
+     * $I->seeOptionInDatabase(['option_name' => 'tables_version', 'option_value' => 1.0']);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed>|string $criteriaOrName An array of search criteria or the option name.
+     * @param mixed|null $value The optional value to try and match, only used if the option name is provided.
+     *
+     * @return void
      */
-    public function seeOptionInDatabase(array $criteria)
+    public function seeOptionInDatabase($criteriaOrName, $value = null)
     {
+        $criteria = $this->normalizeOptionCriteria($criteriaOrName, $value);
         $tableName = $this->grabPrefixedTableNameFor('options');
-        if (!empty($criteria['option_value'])) {
-            $criteria['option_value'] = $this->maybeSerialize($criteria['option_value']);
-        }
+
         $this->seeInDatabase($tableName, $criteria);
     }
 
@@ -1641,17 +1802,18 @@ class WPDb extends Db
      * $I->seeSiteOptionInDatabase('foo_count', 23);
      * ```
      *
-     * @param string     $key The name of the otpion to check.
-     * @param mixed|null $value If set the assertion will also check the option value.
+     * @param array<string,mixed>|string $criteriaOrName An array of search criteria or the option name.
+     * @param mixed|null $value The optional value to try and match, only used if the option name is provided.
+     *
+     * @return void
      */
-    public function seeSiteOptionInDatabase($key, $value = null)
+    public function seeSiteOptionInDatabase($criteriaOrName, $value = null)
     {
         $currentBlogId = $this->blogId;
         $this->useMainBlog();
-        $criteria = ['option_name' => '_site_option_' . $key];
-        if ($value) {
-            $criteria['option_value'] = $value;
-        }
+
+        $criteria = $this->buildSiteOptionCriteria($criteriaOrName, $value);
+
         $this->seeOptionInDatabase($criteria);
         $this->useBlog($currentBlogId);
     }
@@ -1660,19 +1822,14 @@ class WPDb extends Db
      * Inserts many posts in the database returning their IDs.
      *
      * @param int   $count     The number of posts to insert.
-     * @param array $overrides {
+     * @param array<string,mixed> $overrides {
      *                         An array of values to override the defaults.
      *                         The `{{n}}` placeholder can be used to have the post count inserted in its place;
      *                         e.g. `Post Title - {{n}}` will be set to `Post Title - 0` for the first post,
      *                         `Post Title - 1` for the second one and so on.
      *                         The same applies to meta values as well.
      *
-     * @type array  $meta      An associative array of meta key/values to be set for the post, shorthand for the
-     *       `havePostmetaInDatabase` method. e.g. `['one' => 'foo', 'two' => 'bar']`; to have an array value inserted
-     *       in a single row serialize it e.g.
-     *                    `['serialized_field` => serialize(['one','two','three'])]` otherwise a distinct row will be
-     *                    added for each entry. See `havePostmetaInDatabase` method.
-     * }
+     * @return array<int> An array of the inserted post IDs.
      *
      * @example
      * ```php
@@ -1682,7 +1839,6 @@ class WPDb extends Db
      * $I->haveManyPostsInDatabase(3, ['post_title' => 'Test post {{n}}']);
      * ```
      *
-     * @return array An array of the inserted post IDs.
      */
     public function haveManyPostsInDatabase($count, array $overrides = [])
     {
@@ -1702,9 +1858,9 @@ class WPDb extends Db
     /**
      * Sets the template data in the overrides array.
      *
-     * @param array $overrides An array of overrides to apply the template data to.
+     * @param array<string,mixed> $overrides An array of overrides to apply the template data to.
      *
-     * @return array The array of overrides with the template data replaced.
+     * @return array<string,mixed> The array of overrides with the template data replaced.
      */
     protected function setTemplateData(array $overrides = [])
     {
@@ -1721,15 +1877,15 @@ class WPDb extends Db
     /**
      * Replaces each occurrence of the `{{n}}` placeholder with the specified number.
      *
-     * @param mixed $input The entry, or entries, to replace the placeholder in.
+     * @param string|array<string|array> $input The entry, or entries, to replace the placeholder in.
      * @param int   $i     The value to replace the placeholder with.
      *
-     * @return array The input array with any `{{n}]` placeholder replaced with a number.
+     * @return array<int|string,mixed> The input array with any `{{n}}` placeholder replaced with a number.
      */
     protected function replaceNumbersInArray($input, $i)
     {
         $out = [];
-        foreach ($input as $key => $value) {
+        foreach ((array)$input as $key => $value) {
             if (is_array($value)) {
                 $out[$this->replaceNumbersInString($key, $i)] = $this->replaceNumbersInArray($value, $i);
             } else {
@@ -1746,7 +1902,7 @@ class WPDb extends Db
      * @param string $template The string to replace the placeholder in.
      * @param int    $i        The value to replace the placeholder with.
      *
-     * @return mixed
+     * @return string The string with replaces placeholders.
      */
     protected function replaceNumbersInString($template, $i)
     {
@@ -1764,14 +1920,16 @@ class WPDb extends Db
      * Checks for a term in the database.
      * Looks up the `terms` and `term_taxonomy` prefixed tables.
      *
+     * @param array<string,mixed> $criteria An array of criteria to search for the term, can be columns from the `terms`
+     *                                      and the `term_taxonomy` tables.
+     *
+     * @return void
      * @example
      * ```php
      * $I->seeTermInDatabase(['slug' => 'genre--fiction']);
      * $I->seeTermInDatabase(['name' => 'Fiction', 'slug' => 'genre--fiction']);
      * ```
      *
-     * @param array $criteria An array of criteria to search for the term, can be columns from the `terms` and the
-     *                        `term_taxonomy` tables.
      */
     public function seeTermInDatabase(array $criteria)
     {
@@ -1796,8 +1954,10 @@ class WPDb extends Db
      * $I->dontHaveTermInDatabase(['slug' => 'genre--romance']);
      * ```
      *
-     * @param array $criteria  An array of search criteria.
+     * @param array<string,mixed> $criteria  An array of search criteria.
      * @param bool  $purgeMeta Whether the terms meta should be purged along side with the meta or not.
+     *
+     * @return void
      */
     public function dontHaveTermInDatabase(array $criteria, $purgeMeta = true)
     {
@@ -1841,7 +2001,9 @@ class WPDb extends Db
      * $I->dontHaveTermMetaInDatabase(['term_id' => $termId]);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontHaveTermMetaInDatabase(array $criteria)
     {
@@ -1853,6 +2015,11 @@ class WPDb extends Db
      *
      * Looks up both the `terms` table and the `term_taxonomy` tables.
      *
+     * @param array<string,mixed> $criteria An array of criteria to search for the term, can be columns from the `terms`
+     *                                      and the `term_taxonomy` tables.
+     *
+     * @return void
+     *
      * @example
      * ```php
      * // Asserts a 'fiction' term is not in the database.
@@ -1860,9 +2027,6 @@ class WPDb extends Db
      * // Asserts a 'fiction' term with slug 'genre--fiction' is not in the database.
      * $I->dontSeeTermInDatabase(['name' => 'fiction', 'slug' => 'genre--fiction']);
      * ```
-     *
-     * @param array $criteria An array of criteria to search for the term, can be columns from the `terms` and the
-     *                        `term_taxonomy` tables.
      */
     public function dontSeeTermInDatabase(array $criteria)
     {
@@ -1892,9 +2056,9 @@ class WPDb extends Db
      *
      * @param int   $count           The number of comments to insert.
      * @param   int $comment_post_ID The comment parent post ID.
-     * @param array $overrides       An associative array to override the defaults.
+     * @param array<string,mixed> $overrides       An associative array to override the defaults.
      *
-     * @return int[] An array containing the inserted comments IDs.
+     * @return array<int> An array containing the inserted comments IDs.
      */
     public function haveManyCommentsInDatabase($count, $comment_post_ID, array $overrides = [])
     {
@@ -1920,7 +2084,7 @@ class WPDb extends Db
      * ```
      *
      * @param  int   $comment_post_ID The id of the post the comment refers to.
-     * @param  array $data            The comment data overriding default and random generated values.
+     * @param  array<int|string,mixed> $data            The comment data overriding default and random generated values.
      *
      * @return int The inserted comment `comment_id`.
      */
@@ -2032,7 +2196,7 @@ class WPDb extends Db
      * ```
      *
      * @param string $table    The table to count the rows in.
-     * @param array  $criteria Search criteria, if empty all table rows will be counted.
+     * @param array<string,mixed>  $criteria Search criteria, if empty all table rows will be counted.
      *
      * @return int The number of table rows matching the search criteria.
      */
@@ -2049,8 +2213,10 @@ class WPDb extends Db
      * $I->dontHaveCommentInDatabase(['comment_post_ID' => 23, 'comment_url' => 'http://example.copm']);
      * ```
      *
-     * @param  array $criteria  An array of search criteria.
+     * @param  array<string,mixed> $criteria  An array of search criteria.
      * @param bool $purgeMeta If set to `true` then the meta for the comment will be purged too.
+     *
+     * @return void
      *
      * @throws \Exception In case of incoherent query criteria.
      */
@@ -2099,7 +2265,9 @@ class WPDb extends Db
      * $I->dontHaveCommentMetaInDatabase(['comment_id' => 23, 'meta_key' => 'count']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontHaveCommentMetaInDatabase(array $criteria)
     {
@@ -2119,9 +2287,9 @@ class WPDb extends Db
      * ```
      *
      * @param int $count The number of links to insert.
-     * @param array $overrides Overrides for the default arguments.
+     * @param array<string,mixed> $overrides Overrides for the default arguments.
      *
-     * @return array An array of inserted `link_id`s.
+     * @return array<int> An array of inserted `link_id`s.
      */
     public function haveManyLinksInDatabase($count, array $overrides = [])
     {
@@ -2146,7 +2314,7 @@ class WPDb extends Db
      * $linkId = $I->haveLinkInDatabase(['link_url' => 'http://example.org']);
      * ```
      *
-     * @param  array $overrides The data to insert.
+     * @param  array<int|string,mixed> $overrides The data to insert.
      *
      * @return int The inserted link `link_id`.
      */
@@ -2195,9 +2363,9 @@ class WPDb extends Db
      * @param int    $count      The number of users to insert.
      * @param string $user_login The user login name.
      * @param string $role       The user role.
-     * @param array  $overrides  An array of values to override the default ones.
+     * @param array<string,mixed>  $overrides  An array of values to override the default ones.
      *
-     * @return array An array of user IDs.
+     * @return array<int> An array of user IDs.
      */
     public function haveManyUsersInDatabase($count, $user_login, $role = 'subscriber', array $overrides = [])
     {
@@ -2221,43 +2389,72 @@ class WPDb extends Db
     /**
      * Inserts a user and its meta in the database.
      *
-     * @example
-     * ```php
-     * $userId = $I->haveUserInDatabase('luca', 'editor', ['user_email' => 'luca@example.org']);
-     * $subscriberId = $I->haveUserInDatabase('test');
-     * $userWithMeta = $I->haveUserInDatabase('luca', 'editor', [
-     *     'user_email' => 'luca@example.org'
-     *     'meta' => ['a meta_key' => 'a_meta_value']
-     * ]);
-     * ```
-     *
-     * @param  string $user_login The user login name.
-     * @param  string $role       The user role slug, e.g. "administrator"; defaults to "subscriber".
-     * @param  array  $overrides  An associative array of column names and values overridind defaults in the "users"
-     *                            and "usermeta" table.
+     * @param string               $user_login The user login name.
+     * @param string|array<string> $role       The user role slug(s), e.g. `administrator` or `['author', 'editor']`;
+     *                                         defaults to `subscriber`. If more than one role is specified, then the
+     *                                         first role in the list will be the user primary role and the
+     *                                         `wp_user_level` will be set to that role.
+     * @param array<int|string,mixed> $overrides An associative array of column names and values overriding defaults
+     *                                           in the `users` and `usermeta` table.
      *
      * @return int The inserted user ID.
+     *
+     * @example
+     * ```php
+     * // Create an editor user in blog 1 w/ specific email.
+     * $userId = $I->haveUserInDatabase('luca', 'editor', ['user_email' => 'luca@example.org']);
+     *
+     * // Create a subscriber user in blog 1.
+     * $subscriberId = $I->haveUserInDatabase('subscriber');
+     *
+     * // Create a user editor in blog 1, author in blog 2, administrator in blog 3.
+     * $userWithMeta = $I->haveUserInDatabase('luca',
+     *      [
+     *          1 => 'editor',
+     *          2 => 'author',
+     *          3 => 'administrator'
+     *      ], [
+     *          'user_email' => 'luca@example.org'
+     *          'meta' => ['a meta_key' => 'a_meta_value']
+     *      ]
+     * );
+     *
+     * // Create editor in blog 1 w/ `edit_themes` cap, author in blog 2, admin in blog 3 w/o `manage_options` cap.
+     * $userWithMeta = $I->haveUserInDatabase('luca',
+     *      [
+     *          1 => ['editor', 'edit_themes'],
+     *          2 => 'author',
+     *          3 => ['administrator' => true, 'manage_options' => false]
+     *      ]
+     * );
+     *
+     * // Create a user w/o role.
+     * $userId = $I->haveUserInDatabase('luca', '');
+     * ```
+     *
+     * @see WPDb::haveUserCapabilitiesInDatabase() for the roles and caps options.
      */
     public function haveUserInDatabase($user_login, $role = 'subscriber', array $overrides = [])
     {
-        $hasMeta = !empty($overrides['meta']);
+        // Support `meta` and `meta_input` for compatibility w/ format used by Core user factory.
+        $hasMeta = !empty($overrides['meta']) || !empty($overrides['meta_input']);
         $meta = [];
         if ($hasMeta) {
-            $meta = $overrides['meta'];
-            unset($overrides['meta']);
+            $meta = isset($overrides['meta']) ? $overrides['meta'] : $overrides['meta_input'];
+            unset($overrides['meta'], $overrides['meta_input']);
         }
 
         $userTableData = User::generateUserTableDataFrom($user_login, $overrides);
         $this->debugSection('Generated users table data', json_encode($userTableData));
         $userId = $this->haveInDatabase($this->grabUsersTableName(), $userTableData);
 
+        // Handle the user capabilities and associated meta values.
         $this->haveUserCapabilitiesInDatabase($userId, $role);
-        $this->haveUserLevelsInDatabase($userId, $role);
 
-        if ($hasMeta) {
-            foreach ($meta as $key => $value) {
-                $this->haveUserMetaInDatabase($userId, $key, $value);
-            }
+        // Set up the user meta, apply the user-set overrides.
+        $userMetaTableDataFrom = User::generateUserMetaTableDataFrom($user_login, $meta);
+        foreach ($userMetaTableDataFrom as $key => $value) {
+            $this->haveUserMetaInDatabase($userId, $key, $value);
         }
 
         return $userId;
@@ -2307,34 +2504,52 @@ class WPDb extends Db
      *
      * @example
      * ```php
-     * $blogId = $this->haveBlogInDatabase('test');
+     * // Assign one user a role in a blog.
+     * $blogId = $I->haveBlogInDatabase('test');
      * $editor = $I->haveUserInDatabase('luca', 'editor');
      * $capsIds = $I->haveUserCapabilitiesInDatabase($editor, [$blogId => 'editor']);
+     *
+     * // Assign a user two roles in blog 1.
+     * $capsIds = $I->haveUserCapabilitiesInDatabase($userId, ['editor', 'subscriber']);
+     *
+     * // Assign one user different roles in different blogs.
+     * $capsIds = $I->haveUserCapabilitiesInDatabase($userId, [$blogId1 => 'editor', $blogId2 => 'author']);
+     *
+     * // Assign a user a role and an additional capability in blog 1.
+     * $I->haveUserCapabilitiesInDatabase($userId, ['editor' => true, 'edit_themes' => true]);
+     *
+     * // Assign a user a mix of roles and capabilities in different blogs.
+     * $capsIds = $I->haveUserCapabilitiesInDatabase(
+     *      $userId,
+     *      [
+     *          $blogId1 => ['editor' => true, 'edit_themes' => true],
+     *          $blogId2 => ['administrator' => true, 'edit_themes' => false]
+     *      ]
+     * );
      * ```
      *
-     * @param int          $userId The ID of the user to set the capabilities of.
-     * @param string|array $role Either a role string (e.g. `administrator`) or an associative array of blog IDs/roles
-     *                           for a multisite installation (e.g. `[1 => 'administrator`, 2 => 'subscriber']`).
+     * @param int                                        $userId The ID of the user to set the capabilities of.
+     * @param string|array<string|bool>|array<int,array> $role   Either a role string (e.g. `administrator`),an
+     *                                                           associative array of blog IDs/roles for a multisite
+     *                                                           installation (e.g. `[1 => 'administrator`, 2 =>
+     *                                                           'subscriber']`).
      *
-     * @return array An array of inserted `meta_id`.
+     * @return array<int|string,array<int>|int> An array of inserted `meta_id`.
      */
     public function haveUserCapabilitiesInDatabase($userId, $role)
     {
-        if (!is_array($role)) {
-            $meta_key = $this->grabPrefixedTableNameFor() . 'capabilities';
-            $meta_value = serialize([$role => 1]);
+        $insert = User::buildCapabilities($role);
 
-            return $this->haveUserMetaInDatabase($userId, $meta_key, $meta_value);
-        }
-        $ids = [];
-        foreach ($role as $blogId => $_role) {
-            $blogIdAndPrefix = $blogId == 0 ? '' : $blogId . '_';
-            $meta_key = $this->grabPrefixedTableNameFor() . $blogIdAndPrefix . 'capabilities';
-            $meta_value = serialize([$_role => 1]);
-            $ids[] = array_merge($ids, $this->haveUserMetaInDatabase($userId, $meta_key, $meta_value));
+        $roleIds = [];
+        foreach ($insert as $meta_key => $meta_value) {
+            // Delete pre-existing values, if any.
+            $this->dontHaveUserMetaInDatabase(['user_id' => $userId, 'meta_key' => $meta_key]);
+            $roleIds[] = $this->haveUserMetaInDatabase($userId, $meta_key, serialize($meta_value));
         }
 
-        return $ids;
+        $levelIds = $this->haveUserLevelsInDatabase($userId, $role);
+
+        return array_merge($roleIds, $levelIds);
     }
 
     /**
@@ -2351,7 +2566,7 @@ class WPDb extends Db
      * @param mixed  $meta_value Either a single value or an array of values; objects will be serialized while array of
      *                           values will trigger the insertion of multiple rows.
      *
-     * @return array An array of inserted `umeta_id`s.
+     * @return array<int> An array of inserted `umeta_id`s.
      */
     public function haveUserMetaInDatabase($userId, $meta_key, $meta_value)
     {
@@ -2394,6 +2609,12 @@ class WPDb extends Db
     /**
      * Sets the user access level meta in the database for a user.
      *
+     * @param int                             $userId The ID of the user to set the level for.
+     * @param array<array|bool|string>|string $role   Either a role string (e.g. `administrator`) or an array of blog
+     *                                                IDs/roles for a multisite installation
+     *                                                (e.g. `[1 => 'administrator`, 2 => 'subscriber']`).
+     *
+     * @return array<int> An array of inserted `meta_id`.
      * @example
      * ```php
      * $userId = $I->haveUserInDatabase('luca', 'editor');
@@ -2401,29 +2622,25 @@ class WPDb extends Db
      * $I->haveUserLevelsInDatabase($userId, $moreThanAnEditorLessThanAnAdmin);
      * ```
      *
-     * @param int          $userId The ID of the user to set the level for.
-     * @param string|array $role Either a role string (e.g. `administrator`) or an array of blog IDs/roles for a
-     *                           multisite installation (e.g. `[1 => 'administrator`, 2 => 'subscriber']`).
-     *
-     * @return array An array of inserted `meta_id`.
      */
     public function haveUserLevelsInDatabase($userId, $role)
     {
-        if (!is_array($role)) {
-            $meta_key = $this->grabPrefixedTableNameFor() . 'user_level';
-            $meta_value = User::getLevelForRole($role);
+        $roles = User::buildCapabilities($role);
 
-            return $this->haveUserMetaInDatabase($userId, $meta_key, $meta_value);
-        }
         $ids = [];
-        foreach ($role as $blogId => $_role) {
-            $blogIdAndPrefix = $blogId == 0 ? '' : $blogId . '_';
-            $meta_key = $this->grabPrefixedTableNameFor() . $blogIdAndPrefix . 'user_level';
-            $meta_value = User::getLevelForRole($_role);
-            $ids[] = $this->haveUserMetaInDatabase($userId, $meta_key, $meta_value);
+        foreach ($roles as $roleMetaKey => $roleMetaValue) {
+            $levelMetaKey = preg_replace('/capabilities$/', 'user_level', $roleMetaKey);
+            if ($levelMetaKey === null) {
+                $levelMetaKey = $this->grabTablePrefix() . 'user_level';
+            }
+            $this->dontHaveUserMetaInDatabase(['user_id' => $userId, 'meta_key' => $levelMetaKey]);
+            $blogRoles = array_keys((array)$roleMetaValue);
+            $blogPrimaryRole = reset($blogRoles);
+            $level = $blogPrimaryRole ? User::getLevelForRole($blogPrimaryRole) : 0;
+            $ids[] = $this->haveUserMetaInDatabase($userId, $levelMetaKey, $level);
         }
 
-        return $ids;
+        return array_merge(...$ids);
     }
 
     /**
@@ -2439,9 +2656,9 @@ class WPDb extends Db
      * @param       int    $count     The number of terms to insert.
      * @param       string $name      The term name template, can include the `{{n}}` placeholder.
      * @param       string $taxonomy  The taxonomy to insert the terms for.
-     * @param array        $overrides An associative array of default overrides.
+     * @param array<string,mixed>        $overrides An associative array of default overrides.
      *
-     * @return array An array of arrays containing `term_id` and `term_taxonomy_id` of the inserted terms.
+     * @return array<array<int>> An array of arrays containing `term_id` and `term_taxonomy_id` of the inserted terms.
      */
     public function haveManyTermsInDatabase($count, $name, $taxonomy, array $overrides = [])
     {
@@ -2472,7 +2689,9 @@ class WPDb extends Db
      * $I->seeTermTaxonomyInDatabase(['term_id' => $termId, 'taxonomy' => 'genre']);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeTermTaxonomyInDatabase(array $criteria)
     {
@@ -2488,7 +2707,9 @@ class WPDb extends Db
      * $I->dontSeeTermTaxonomyInDatabase(['term_id' => $termId, 'taxonomy' => 'country']);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeeTermTaxonomyInDatabase(array $criteria)
     {
@@ -2505,10 +2726,15 @@ class WPDb extends Db
      * $I->seeTermMetaInDatabase(['term_id' => $termId,'meta_key' => 'rating', 'meta_value' => 4]);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeTermMetaInDatabase(array $criteria)
     {
+        if (!empty($criteria['meta_value'])) {
+            $criteria['meta_value'] = $this->maybeSerialize($criteria['meta_value']);
+        }
         $this->seeInDatabase($this->grabTermMetaTableName(), $criteria);
     }
 
@@ -2522,10 +2748,15 @@ class WPDb extends Db
      * $I->dontSeeTermMetaInDatabase(['term_id' => $termId,'meta_key' => 'average_review']);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeeTermMetaInDatabase(array $criteria)
     {
+        if (!empty($criteria['meta_value'])) {
+            $criteria['meta_value'] = $this->maybeSerialize($criteria['meta_value']);
+        }
         $this->dontSeeInDatabase($this->grabTermMetaTableName(), $criteria);
     }
 
@@ -2539,6 +2770,8 @@ class WPDb extends Db
      * ```
      *
      * @param string $table The full table name, including the table prefix.
+     *
+     * @return void
      */
     public function seeTableInDatabase($table)
     {
@@ -2671,7 +2904,9 @@ class WPDb extends Db
      * $I->seeBlogInDatabase(['path' => '/sub-path/']);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeBlogInDatabase(array $criteria)
     {
@@ -2700,9 +2935,9 @@ class WPDb extends Db
     /**
      * Prepares the array of criteria that will be used to search a blog in the database.
      *
-     * @param array $criteria An input array of blog search criteria.
+     * @param array<string,mixed> $criteria An input array of blog search criteria.
      *
-     * @return array The prepared array of blog search criteria.
+     * @return array<string,mixed> The prepared array of blog search criteria.
      */
     protected function prepareBlogCriteria(array $criteria)
     {
@@ -2716,20 +2951,21 @@ class WPDb extends Db
     /**
      * Inserts many blogs in the database.
      *
+     * @param int                 $count     The number of blogs to create.
+     * @param array<string,mixed> $overrides An array of values to override the default ones; `{{n}}` will be replaced
+     *                                       by the count.
+     * @param bool                $subdomain Whether the new blogs should be created as a subdomain or subfolder.
+     *
+     * @return array<int> An array of inserted blogs `blog_id`s.
      * @example
-     * ```php
-     * $blogIds = $I->haveManyBlogsInDatabase(3, ['domain' =>'test-{{n}}']);
-     * foreach($blogIds as $blogId){
+     *      ```php
+     *      $blogIds = $I->haveManyBlogsInDatabase(3, ['domain' =>'test-{{n}}']);
+     *      foreach($blogIds as $blogId){
      *      $I->useBlog($blogId);
      *      $I->haveManuPostsInDatabase(3);
      * }
      * ```
      *
-     * @param int   $count     The number of blogs to create.
-     * @param array $overrides An array of values to override the default ones; `{{n}}` will be replaced by the count.
-     * @param bool  $subdomain Whether the new blogs should be created as a subdomain or subfolder.
-     *
-     * @return array An array of inserted blogs `blog_id`s.
      */
     public function haveManyBlogsInDatabase($count, array $overrides = [], $subdomain = true)
     {
@@ -2740,7 +2976,7 @@ class WPDb extends Db
             $domainOrPath = 'blog-' . $i;
 
             if (isset($blogOverrides['slug'])) {
-                $domainOrPath = $blogOverrides['slug'];
+                $domainOrPath = (string)$blogOverrides['slug'];
                 unset($blogOverrides['slug']);
             }
 
@@ -2762,7 +2998,7 @@ class WPDb extends Db
      * ```
      *
      * @param  string $domainOrPath     The subdomain or the path to the be used for the blog.
-     * @param array   $overrides        An array of values to override the defaults.
+     * @param array<int|string,mixed>   $overrides        An array of values to override the defaults.
      * @param bool    $subdomain        Whether the new blog should be created as a subdomain (`true`)
      *                                  or subfolder (`true`)
      *
@@ -2770,7 +3006,7 @@ class WPDb extends Db
      */
     public function haveBlogInDatabase($domainOrPath, array $overrides = [], $subdomain = true)
     {
-        $base = Blog::makeDefaults($subdomain);
+        $base = Blog::makeDefaults();
         if ($subdomain) {
             $base['domain'] = false !== strpos($domainOrPath, $this->getSiteDomain())
                 ? $domainOrPath
@@ -2785,7 +3021,7 @@ class WPDb extends Db
 
         // Make sure the path is in the `/path/` format.
         if (isset($data['path']) && $data['path'] !== '/') {
-            $data['path'] = '/' . Utils::unleadslashit(Utils::untrailslashit($data['path'])) . '/';
+            $data['path'] = '/' . unleadslashit(untrailslashit($data['path'])) . '/';
         }
 
         $blogId = $this->haveInDatabase($this->grabBlogsTableName(), $data);
@@ -2829,6 +3065,8 @@ class WPDb extends Db
      * @param int $blogId The blog ID.
      * @param string $domainOrPath Either the path or the sub-domain of the blog to create.
      * @param bool $isSubdomain Whether to create a sub-folder or a sub-domain blog.
+     *
+     * @return void
      */
     protected function scaffoldBlogTables($blogId, $domainOrPath, $isSubdomain = true)
     {
@@ -2894,9 +3132,12 @@ class WPDb extends Db
      * $I->dontHaveBlogInDatabase(['domain' => 'test']);
      * ```
      *
-     * @param array $criteria An array of search criteria to find the blog rows in the blogs table.
+     * @param array<string,mixed> $criteria An array of search criteria to find the blog rows in the blogs table.
      * @param bool $removeTables Remove the blog tables.
      * @param bool $removeUploads Remove the blog uploads; requires the `WPFilesystem` module.
+     *
+     * @return void
+     *
      * @throws \Exception
      */
     public function dontHaveBlogInDatabase(array $criteria, $removeTables = true, $removeUploads = true)
@@ -2936,21 +3177,21 @@ class WPDb extends Db
     /**
      * Returns a list of tables for a blog ID.
      *
+     * @param int $blogId The ID of the blog to fetch the tables for.
+     *
+     * @return array<string> An array of tables for the blog, it does not include the tables common to all blogs; an
+     *                       empty array if the tables for the blog do not exist.
+     *
+     * @throws \Exception If there is any error while preparing the query.
      * @example
-     * ```php
-     * $blogId = $I->haveBlogInDatabase('test');
-     * $tables = $I->grabBlogTableNames($blogId);
-     * $options = array_filter($tables, function($tableName){
+     *      ```php
+     *      $blogId = $I->haveBlogInDatabase('test');
+     *      $tables = $I->grabBlogTableNames($blogId);
+     *      $options = array_filter($tables, function($tableName){
      *      return str_pos($tableName, 'options') !== false;
      * });
      * ```
      *
-     * @param int $blogId The ID of the blog to fetch the tables for.
-     *
-     * @return array An array of tables for the blog, it does not include the tables common to all blogs; an empty array
-     *               if the tables for the blog do not exist.
-     *
-     * @throws \Exception If there is any error while preparing the query.
      */
     public function grabBlogTableNames($blogId)
     {
@@ -2973,6 +3214,8 @@ class WPDb extends Db
      * ```
      *
      * @param string $fullTableName The full table name, including the table prefix.
+     *
+     * @return void
      *
      * @throws \Exception If there is an error while dropping the table.
      */
@@ -3002,7 +3245,9 @@ class WPDb extends Db
      * $I->dontSeeBlogInDatabase(['path' => '/test-3/'])
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeeBlogInDatabase(array $criteria)
     {
@@ -3020,10 +3265,12 @@ class WPDb extends Db
      * ```
      *
      * @param string      $stylesheet The theme stylesheet slug, e.g. `twentysixteen`.
-     * @param string|null $template   The theme template slug, e.g. `twentysixteen`, defaults to `$stylesheet`.
+     * @param string $template   The theme template slug, e.g. `twentysixteen`, defaults to `$stylesheet`.
      *
-     * @param string|null $themeName The theme name, e.g. `Acme`, defaults to the "title" version of
+     * @param string $themeName The theme name, e.g. `Acme`, defaults to the "title" version of
      *                                     `$stylesheet`.
+     *
+     * @return void
      */
     public function useTheme($stylesheet, $template = null, $themeName = null)
     {
@@ -3052,9 +3299,9 @@ class WPDb extends Db
      *
      * @param string $slug      The menu slug.
      * @param string $location  The theme menu location the menu will be assigned to.
-     * @param array  $overrides An array of values to override the defaults.
+     * @param array<string,mixed>  $overrides An array of values to override the defaults.
      *
-     * @return array An array containing the created menu `term_id` and `term_taxonomy_id`.
+     * @return array<int> An array containing the created menu `term_id` and `term_taxonomy_id`.
      */
     public function haveMenuInDatabase($slug, $location, array $overrides = [])
     {
@@ -3089,6 +3336,13 @@ class WPDb extends Db
     /**
      * Adds a menu element to a menu for the current theme.
      *
+     * @param string              $menuSlug  The menu slug the item should be added to.
+     * @param string              $title     The menu item title.
+     * @param int|null            $menuOrder An optional menu order, `1` based.
+     * @param array<string,mixed> $meta      An associative array that will be prefixed with `_menu_item_` for the item
+     *                                       post meta.
+     *
+     * @return int The menu item post `ID`
      * @example
      * ```php
      * $I->haveMenuInDatabase('test', 'sidebar');
@@ -3096,12 +3350,6 @@ class WPDb extends Db
      * $I->haveMenuItemInDatabase('test', 'Test two', 1);
      * ```
      *
-     * @param string $menuSlug The menu slug the item should be added to.
-     * @param string $title The menu item title.
-     * @param int|null $menuOrder An optional menu order, `1` based.
-     * @param array $meta An associative array that will be prefixed with `_menu_item_` for the item post meta.
-     *
-     * @return int The menu item post `ID`
      */
     public function haveMenuItemInDatabase($menuSlug, $title, $menuOrder = null, array $meta = [])
     {
@@ -3145,7 +3393,9 @@ class WPDb extends Db
      * $I->seeTermRelationshipInDatabase(['object_id' => $postId, 'term_taxonomy_id' => $oneTermTaxId]);
      * ```
      *
-     * @param array $criteria An array of search criteria.
+     * @param array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeTermRelationshipInDatabase(array $criteria)
     {
@@ -3156,6 +3406,8 @@ class WPDb extends Db
      * Sets the database driver of this object.
      *
      * @param mixed $driver
+     *
+     * @return void
      */
     public function _setDriver($driver)
     {
@@ -3165,6 +3417,23 @@ class WPDb extends Db
     /**
      * Creates the database entries representing an attachment and moves the attachment file to the right location.
      *
+     * @param string                   $file       The absolute path to the attachment file.
+     * @param string|int               $date       Either a string supported by the `strtotime` function or a UNIX
+     *                                             timestamp that should be used to build the "year/time" uploads
+     *                                             sub-folder structure.
+     * @param array<string,mixed>      $overrides  An associative array of values overriding the default ones.
+     * @param array<string,array<int>> $imageSizes An associative array in the format [ <size> => [<width>,<height>]] to
+     *                                             override the image sizes created by default.
+     *
+     * @return int The post ID of the inserted attachment.
+     *
+     * @throws ModuleException If the WPFilesystem module is not loaded in the suite or the file to attach is not
+     *                         readable
+     *
+     * @throws \Gumlet\ImageResizeException If the image resize operation fails while trying to create the image sizes.
+     *
+     * @throws ModuleRequireException If the `WPFileSystem` module is not loaded in the suite or if the
+     *                                'gumlet/php-image-resize:^1.6' package is not installed.
      * @example
      * ```php
      * $file = codecept_data_dir('images/test.png');
@@ -3175,22 +3444,16 @@ class WPDb extends Db
      *
      * Requires the WPFilesystem module.
      *
-     * @param string $file The absolute path to the attachment file.
-     * @param string|int $date Either a string supported by the `strtotime` function or a UNIX timestamp that
-     *                               should be used to build the "year/time" uploads sub-folder structure.
-     * @param array $overrides An associative array of values overriding the default ones.
-     * @param array $imageSizes An associative array in the format [ <size> => [<width>,<height>]] to override the
-     *                               image sizes created by default.
-     *
-     * @return int The post ID of the inserted attachment.
-     *
-     * @throws ModuleException If the WPFilesystem module is not loaded in the suite or the file to attach is not
-     *                         readable
-     * @throws \Gumlet\ImageResizeException If the image resize operation fails while trying to create the image sizes.
-     * @throws ModuleRequireException If the `WPFileSystem` module is not loaded in the suite.
      */
     public function haveAttachmentInDatabase($file, $date = 'now', array $overrides = [], $imageSizes = null)
     {
+        if (!class_exists('\\Gumlet\\ImageResize')) {
+            $message = 'The "haveAttachmentInDatabase" method requires the "gumlet/php-image-resize:^1.6" package.' .
+                PHP_EOL .
+                'Please install it using the command "composer require --dev gumlet/php-image-resize:^1.6"';
+            throw new ModuleRequireException($this, $message);
+        }
+
         try {
             $fs = $this->getWpFilesystemModule();
         } catch (ModuleException $e) {
@@ -3216,7 +3479,7 @@ class WPDb extends Db
 
         $uploadedFilePath = $fs->writeToUploadedFile($pathInfo['basename'], $data, $date);
         $uploadUrl = $this->grabSiteUrl(str_replace($fs->getWpRootFolder(), '', $uploadedFilePath));
-        $uploadLocation = Utils::unleadslashit(str_replace($fs->getUploadsPath(), '', $uploadedFilePath));
+        $uploadLocation = unleadslashit(str_replace($fs->getUploadsPath(), '', $uploadedFilePath));
 
         $mimeType = mime_content_type($file);
 
@@ -3338,7 +3601,7 @@ class WPDb extends Db
         $url = $this->config['url'];
 
         if ($path !== null) {
-            return Utils::untrailslashit($this->config['url']) . DIRECTORY_SEPARATOR . Utils::unleadslashit($path);
+            return untrailslashit($this->config['url']) . DIRECTORY_SEPARATOR . unleadslashit($path);
         }
 
         return $url;
@@ -3352,7 +3615,9 @@ class WPDb extends Db
      * $url = 'https://example.org/images/foo.png';
      * $I->seeAttachmentInDatabase(['guid' => $url]);
      * ```
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function seeAttachmentInDatabase(array $criteria)
     {
@@ -3368,7 +3633,9 @@ class WPDb extends Db
      * $I->dontSeeAttachmentInDatabase(['guid' => $url]);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontSeeAttachmentInDatabase(array $criteria)
     {
@@ -3378,9 +3645,19 @@ class WPDb extends Db
     /**
      * Removes an attachment from the posts table.
      *
+     * @param array<string,mixed> $criteria    An array of search criteria to find the attachment post in the posts
+     *                                         table.
+     * @param bool                $purgeMeta   If set to `true` then the meta for the attachment will be purged too.
+     * @param bool $removeFiles                Remove all files too, requires the `WPFilesystem` module to be loaded in
+     *                                         the suite.
+     *
+     * @return void
+     *
+     * @throws ModuleException If the WPFilesystem module is not loaded in the suite
+     *                                                and the `$removeFiles` argument is `true`.
      * @example
-     * ```
-     * $postmeta = $I->grabpostmetatablename();
+     *      ```
+     *      $postmeta = $I->grabpostmetatablename();
      * $thumbnailId = $I->grabFromDatabase($postmeta, 'meta_value', [
      *      'post_id' => $id,
      *      'meta_key'=>'thumbnail_id'
@@ -3391,12 +3668,6 @@ class WPDb extends Db
      * $I->dontHaveAttachmentInDatabase($thumbnailId, true, true);
      * ```
      *
-     * @param  array $criteria    An array of search criteria to find the attachment post in the posts table.
-     * @param bool   $purgeMeta   If set to `true` then the meta for the attachment will be purged too.
-     * @param bool   $removeFiles Remove all files too, requires the `WPFilesystem` module to be loaded in the suite.
-     *
-     * @throws ModuleException If the WPFilesystem module is not loaded in the suite
-     *                                                and the `$removeFiles` argument is `true`.
      */
     public function dontHaveAttachmentInDatabase(array $criteria, $purgeMeta = true, $removeFiles = false)
     {
@@ -3423,7 +3694,9 @@ class WPDb extends Db
      * $I->dontHaveAttachmentFilesInDatabase($attachmentIds);
      * ```
      *
-     * @param array|int $attachmentIds An attachment post ID or an array of attachment post IDs.
+     * @param array<int>|int $attachmentIds An attachment post ID or an array of attachment post IDs.
+     *
+     * @return void
      *
      * @throws ModuleRequireException If the `WPFilesystem` module is not loaded in the suite.
      */
@@ -3445,7 +3718,7 @@ class WPDb extends Db
             $attachedFile = $this->grabAttachmentAttachedFile($attachmentId);
             $attachmentMetadata = $this->grabAttachmentMetadata($attachmentId);
 
-            $filesPath = Utils::untrailslashit($fs->getUploadsPath(dirname($attachedFile)));
+            $filesPath = untrailslashit($fs->getUploadsPath(dirname($attachedFile)));
 
 
             if (!isset($attachmentMetadata['sizes']) && is_array($attachmentMetadata['sizes'])) {
@@ -3490,15 +3763,16 @@ class WPDb extends Db
      * Returns the metadata array for an attachment post.
      * This is the value of the `_wp_attachment_metadata` meta.
      *
+     * @param int $attachmentPostId The attachment post ID.
+     *
+     * @return array<string,mixed> The unserialized contents of the attachment `_wp_attachment_metadata` meta or an
+     *                             empty array.
      * @example
      * ```php
      * $metadata = $I->grabAttachmentMetadata($attachmentId);
      * $I->assertEquals(['thumbnail', 'medium', 'medium_large'], array_keys($metadata['sizes']);
      * ```
      *
-     * @param int $attachmentPostId The attachment post ID.
-     *
-     * @return array The unserialized contents of the attachment `_wp_attachment_metadata` meta or an empty array.
      */
     public function grabAttachmentMetadata($attachmentPostId)
     {
@@ -3522,8 +3796,10 @@ class WPDb extends Db
      * $I->dontHavePostInDatabase(['post_title' => 'Test 2']);
      * ```
      *
-     * @param  array $criteria  An array of search criteria.
+     * @param  array<string,mixed> $criteria  An array of search criteria.
      * @param bool   $purgeMeta If set to `true` then the meta for the post will be purged too.
+     *
+     * @return void
      */
     public function dontHavePostInDatabase(array $criteria, $purgeMeta = true)
     {
@@ -3547,7 +3823,9 @@ class WPDb extends Db
      * $I->dontHavePostMetaInDatabase(['post_id' => $postId, 'meta_key' => 'rating']);
      * ```
      *
-     * @param  array $criteria An array of search criteria.
+     * @param  array<string,mixed> $criteria An array of search criteria.
+     *
+     * @return void
      */
     public function dontHavePostMetaInDatabase(array $criteria)
     {
@@ -3567,7 +3845,7 @@ class WPDb extends Db
      * @param string $userEmail The email of the user to remove.
      * @param bool   $purgeMeta Whether the user meta should be purged alongside the user or not.
      *
-     * @return array An array of the deleted user(s) ID(s)
+     * @return array<int> An array of the deleted user(s) ID(s)
      */
     public function dontHaveUserInDatabaseWithEmail($userEmail, $purgeMeta = true)
     {
@@ -3619,6 +3897,8 @@ class WPDb extends Db
      *
      * @param int|string $userIdOrLogin The user ID or login name.
      * @param bool       $purgeMeta Whether the user meta should be purged alongside the user or not.
+     *
+     * @return void
      */
     public function dontHaveUserInDatabase($userIdOrLogin, $purgeMeta = true)
     {
@@ -3658,7 +3938,7 @@ class WPDb extends Db
      * @param string $metaKey The key of the meta to retrieve.
      * @param bool   $single  Whether to return a single meta value or an arrya of all available meta values.
      *
-     * @return mixed|array Either a single meta value or an array of all the available meta values.
+     * @return mixed|array<string,mixed> Either a single meta value or an array of all the available meta values.
      */
     public function grabPostMetaFromDatabase($postId, $metaKey, $single = false)
     {
@@ -3722,6 +4002,8 @@ class WPDb extends Db
      * ```
      *
      * @param string $table The full table name, including the table prefix.
+     *
+     * @return void
      */
     public function dontSeeTableInDatabase($table)
     {
@@ -3802,9 +4084,11 @@ class WPDb extends Db
      * Prepares a database dump to be loaded by cleaning it and replacing
      * URLs in it if required.
      *
-     * @param string|array $dump The dump string or array of lines.
+     * @param string|array<string> $dump The dump string or array of lines.
      *
-     * @return string|array The ready SQL dump.
+     * @return string|array<string> The ready SQL dump.
+     *
+     * @throws ModuleException If there's any issue with the URL replacement.
      */
     protected function prepareSqlDump($dump)
     {
@@ -3815,15 +4099,17 @@ class WPDb extends Db
             return '';
         }
 
-        return $this->_replaceUrlInDump($prepared);
+        return $this->_replaceUrlInDump((array)$prepared);
     }
 
     /**
      * Replaces the URL hard-coded in the database with the one set in the the config if required.
      *
-     * @param string|array $sql The SQL dump string or strings.
+     * @param array<string>|string $sql The SQL dump string or strings.
      *
-     * @return array|string The SQL dump string, or strings, with the hard-coded URL replaced.
+     * @return string|array<string> The SQL dump string, or strings, with the hard-coded URL replaced.
+     *
+     * @throws ModuleException If there's an issue while processing the SQL dump file.
      */
     public function _replaceUrlInDump($sql)
     {
@@ -3833,13 +4119,22 @@ class WPDb extends Db
 
         $this->dbDump->setTablePrefix($this->config['tablePrefix']);
         $this->dbDump->setUrl($this->config['url']);
+        $this->dbDump->setOriginalUrl(null);
 
-        if (\is_array($sql)) {
-            $sql = $this->dbDump->replaceSiteDomainInSqlArray($sql);
-            $sql = $this->dbDump->replaceSiteDomainInMultisiteSqlArray($sql);
-        } else {
-            $sql = $this->dbDump->replaceSiteDomainInSqlString($sql, true);
-            $sql = $this->dbDump->replaceSiteDomainInMultisiteSqlString($sql, true);
+        if (!empty($this->config['originalUrl'])) {
+            $this->dbDump->setOriginalUrl($this->config['originalUrl']);
+        }
+
+        try {
+            if (\is_array($sql)) {
+                $sql = $this->dbDump->replaceSiteDomainInSqlArray($sql);
+                $sql = $this->dbDump->replaceSiteDomainInMultisiteSqlArray($sql);
+            } else {
+                $sql = $this->dbDump->replaceSiteDomainInSqlString($sql, true);
+                $sql = $this->dbDump->replaceSiteDomainInMultisiteSqlString($sql, true);
+            }
+        } catch (DumpException $e) {
+            throw new ModuleException($this, $e->getMessage());
         }
 
         return $sql;
@@ -3851,6 +4146,8 @@ class WPDb extends Db
      * Will look up the "terms" table, will throw if not found.
      *
      * @param  int $term_id The term ID.
+     *
+     * @return void
      */
     protected function maybeCheckTermExistsInDatabase($term_id)
     {
@@ -3864,7 +4161,13 @@ class WPDb extends Db
     }
 
     /**
-     * {@inheritdoc}
+     * Loads a database dump using the current driver.
+     *
+     * @param string $databaseKey The key of the database to load the dump for.
+     *
+     * @return void
+     *
+     * @throws ModuleException If there's a configuration or operation issue.
      */
     protected function loadDumpUsingDriver($databaseKey)
     {
@@ -3873,6 +4176,20 @@ class WPDb extends Db
         }
 
         parent::loadDumpUsingDriver($databaseKey);
+    }
+
+    /**
+     * Loads the SQL dumps specified for a database.
+     *
+     * @param string|null $databaseKey The key of the database to load.
+     * @param array<string,mixed>|null $databaseConfig The configuration for the database to load.
+     *
+     * @return void
+     */
+    public function _loadDump($databaseKey = null, $databaseConfig = null)
+    {
+        parent::_loadDump($databaseKey, $databaseConfig);
+        $this->prepareDb();
     }
 
     /**
@@ -3897,6 +4214,9 @@ class WPDb extends Db
      *                                         term order.
      * @param  string|null  $taxonomy          The taxonomy the `term_id` is for; if passed this parameter will be used
      *                                         to build a `taxonomy_term_id` from the `term_id`.
+     *
+     * @return void
+     *
      * @throws ModuleException If a `term_id` is specified but it cannot be matched to the `taxonomy`.
      */
     public function dontSeePostWithTermInDatabase($post_id, $term_taxonomy_id, $term_order = null, $taxonomy = null)
@@ -3926,5 +4246,259 @@ class WPDb extends Db
         }
 
         $this->dontSeeInDatabase($tableName, $criteria);
+    }
+
+    /**
+     * Overrides the base module implementation to fire a ModuleEvent.
+     *
+     * @param array<string,mixed> $settings The suite settings.
+     *
+     * @return void
+     *
+     * @throws ModuleException If there's any issue getting hold of the current Codeception global dispatcher.
+     */
+    public function _beforeSuite($settings = [])
+    {
+        parent::_beforeSuite($settings);
+
+        /**
+         * Dispatches an event after the WPDb module handled the BEFORE_SUITE event.
+         *
+         * @param WPDb $this The current module instance.
+         */
+        $this->doAction(static::EVENT_BEFORE_SUITE, $this);
+    }
+
+    /**
+     * Creates any database that is flagged, in the config, with the `createIfNotExists` flag.
+     *
+     * @param array<string,mixed> $config The current module configuration.
+     *
+     * @return void
+     *
+     * @throws ModuleException If there's any issue processing or reading the database DSN information.
+     */
+    protected function createDatabasesIfNotExist(array $config)
+    {
+        $createIfNotExist = [];
+        if (!empty($config['createIfNotExists'])) {
+            $createIfNotExist[$config['dsn']] = [$config['user'], $config['password']];
+        }
+
+        if (!empty($config['databases']) && is_array($config['databases'])) {
+            foreach ($config['databases'] as $config) {
+                if (!empty($config['createIfNotExists'])) {
+                    $createIfNotExist[$config['dsn']] = [$config['user'], $config['password']];
+                }
+            }
+        }
+
+        if (!empty($createIfNotExist)) {
+            foreach ($createIfNotExist as $dsn => list($user, $pass)) {
+                $dsnMap = dbDsnToMap((string)$dsn);
+                $dbname = $dsnMap('dbname', '');
+
+                if (empty($dbname)) {
+                    throw new ModuleException(
+                        $this,
+                        sprintf('Failed to create database; DSN "%s" does not contain the database name.', $dsn)
+                    );
+                }
+
+                try {
+                    // Since the database might not exist at this point, remove the `dbname` from the DSN string.
+                    unset($dsnMap['dbname']);
+                    $db = db(dbDsnString($dsnMap), $user, $pass);
+                    $db('CREATE DATABASE IF NOT EXISTS ' . $dbname);
+                } catch (\Exception $e) {
+                    throw new ModuleException(
+                        $this,
+                        sprintf('Failed to create database; error: .' . $e->getMessage())
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Prepares the WordPress database with some test-quality-of-life-improvements.
+     *
+     * @return void
+     */
+    protected function prepareDb()
+    {
+        if (empty($this->config['letAdminEmailVerification'])) {
+            // Skip the admin email verification screen.
+            $this->haveOptionInDatabase('admin_email_lifespan', self::ADMIN_EMAIL_LIFESPAN);
+        }
+
+        if (empty($this->config['letCron'])) {
+            // Avoid spawning cron.
+            $this->haveTransientInDatabase('doing_cron', strtotime('+9 minutes'));
+        }
+
+        /**
+         * Dispatches an event after the database has been prepared.
+         *
+         * @param WPDb $origin This objects.
+         * @param array<string,mixed> $config The current WPDb module configuration.
+         */
+        $this->doAction(static::EVENT_AFTER_DB_PREPARE, $this, $this->config);
+    }
+
+    /**
+     * Assigns the specified attachment ID as thumbnail (featured image) to a post.
+     *
+     * @example
+     * ```php
+     * $attachmentId = $I->haveAttachmentInDatabase(codecept_data_dir('some-image.png'));
+     * $postId = $I->havePostInDatabase();
+     * $I->havePostThumbnailInDatabase($postId, $attachmentId);
+     * ```
+     *
+     * @param int $postId      The post ID to assign the thumbnail (featured image) to.
+     * @param int $thumbnailId The post ID of the attachment.
+     *
+     * @return int The inserted meta id.
+     */
+    public function havePostThumbnailInDatabase($postId, $thumbnailId)
+    {
+        $this->dontHavePostThumbnailInDatabase($postId);
+        return $this->havePostmetaInDatabase($postId, '_thumbnail_id', (int) $thumbnailId);
+    }
+
+    /**
+     * Remove the thumbnail (featured image) from a post, if any.
+     *
+     * Please note: the method will NOT remove the attachment post, post meta and file.
+     *
+     * @example
+     * ```php
+     * $attachmentId = $I->haveAttachmentInDatabase(codecept_data_dir('some-image.png'));
+     * $postId = $I->havePostInDatabase();
+     * // Attach the thumbnail to the post.
+     * $I->havePostThumbnailInDatabase($postId, $attachmentId);
+     * // Remove the thumbnail from the post.
+     * $I->dontHavePostThumbnailInDatabase($postId);
+     * ```
+     *
+     * @param int $postId The post ID to remove the thumbnail (featured image) from.
+     *
+     * @return void
+     */
+    public function dontHavePostThumbnailInDatabase($postId)
+    {
+        $this->dontHavePostMetaInDatabase([ 'post_id' => $postId, 'meta_key' => '_thumbnail_id' ]);
+    }
+
+    /**
+     * Loads a set SQL code lines in the current database.
+     *
+     * @example
+     * ```php
+     * // Import a SQL string.
+     * $I->importSql([$sqlString]);
+     * // Import a set of SQL strings.
+     * $I->importSql($sqlStrings);
+     * // Import a prepared set of SQL strings.
+     * $preparedSqlStrings = array_map(function($line){
+     *     return str_replace('{{date}}', date('Y-m-d H:i:s'), $line);
+     * }, $sqlTemplate);
+     * $I->importSql($preparedSqlStrings);
+     * ```
+     *
+     * @param array<string> $sql The SQL strings to load.
+     *
+     * @return void
+     */
+    public function importSql(array $sql)
+    {
+        $this->_getDriver()->load($sql);
+    }
+
+    /**
+     * Normalizes a site option name.
+     *
+     * @param string $name The site option name to normalize, either containing a `_site_option_` prefix or not.
+     * @param string $prefix The option name prefix to normalize for.
+     *
+     * @return string The normalized site option name, with a `_site_option_` prefix.
+     */
+    protected function normalizePrefixedOptionName($name, $prefix)
+    {
+        return strpos($name, $prefix) === 0 ? $name : $prefix . $name;
+    }
+
+    /**
+     * Checks that a site option is not in the database.
+     *
+     * @example
+     * ```php
+     * // Check that the option is not set in the database.
+     * $I->dontSeeSiteOptionInDatabase('foo_count');
+     * // Check that the option is not set with a specific value.
+     * $I->dontSeeSiteOptionInDatabase('foo_count', 23);
+     * $I->dontSeeSiteOptionInDatabase(['option_name => 'foo_count', 'option_value' => 23]);
+     * ```
+     *
+     * @param array<string,mixed>|string $criteriaOrName An array of search criteria or the option name.
+     * @param mixed|null $value The optional value to try and match, only used if the option name is provided.
+     *
+     * @return void
+     */
+    public function dontSeeSiteOptionInDatabase($criteriaOrName, $value = null)
+    {
+        $currentBlogId = $this->blogId;
+        $this->useMainBlog();
+
+        $criteria = $this->buildSiteOptionCriteria($criteriaOrName, $value);
+
+        $this->dontSeeOptionInDatabase($criteria);
+        $this->useBlog($currentBlogId);
+    }
+
+    /**
+     * Builds the criteria required to search for a site option.
+     *
+     * @param string|array<string,mixed> $criteriaOrName Either the ready to use array criteria or the site option name.
+     * @param mixed|null $value The site option value, only used if the first parameter is not an array.
+     * @return array<string,mixed> An array of criteria to search for the site option.
+     */
+    protected function buildSiteOptionCriteria($criteriaOrName, $value = null)
+    {
+        $criteria = $this->normalizeOptionCriteria($criteriaOrName, $value);
+        if (isset($criteria['option_name'])) {
+            $criteria['option_name'] = $this->normalizePrefixedOptionName($criteria['option_name'], '_site_option_');
+        }
+
+        return $criteria;
+    }
+
+    /**
+     * Normalizes an option criteria to consistently build array format criteria from name and value tuples.
+     *
+     * @param array<string,mixed>|string $criteriaOrName The option name or the criteria to check the option by.
+     * @param mixed|null $value The option value to check; ignored if the first parameter is an array.
+     *
+     * @return array<string,mixed> An array of option criteria, normalized.
+     */
+    protected function normalizeOptionCriteria($criteriaOrName, $value = null)
+    {
+        $criteria = [];
+
+        if (!is_array($criteriaOrName)) {
+            $criteria['option_name'] = $criteriaOrName;
+            if ($value !== null) {
+                $criteria['option_value'] = $value;
+            }
+        } else {
+            $criteria = $criteriaOrName;
+        }
+
+        if (isset($criteria['option_value'])) {
+            $criteria['option_value']= $this->maybeSerialize($criteria['option_value']);
+        }
+
+        return $criteria;
     }
 }

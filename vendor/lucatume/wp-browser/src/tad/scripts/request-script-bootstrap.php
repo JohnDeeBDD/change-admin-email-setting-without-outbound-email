@@ -1,9 +1,11 @@
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
 
-include dirname(__FILE__) . '/support-functions.php';
-include dirname(__FILE__) . '/filters.php';
-include dirname(__FILE__) . '/pluggable-functions-override.php';
+include __DIR__ . '/support-functions.php';
+include __DIR__ . '/filters.php';
+include __DIR__ . '/pluggable-functions-override.php';
+
+global $argv;
 
 $indexFile = $argv[1];
 
@@ -34,18 +36,14 @@ if (!empty($env['request'])) {
 }
 
 if (!empty($env['get'])) {
-    if (!empty($env['get'])) {
-        foreach ($env['get'] as $key => $value) {
-            $_GET[$key] = $value;
-        }
+    foreach ($env['get'] as $key => $value) {
+        $_GET[$key] = $value;
     }
 }
 
 if (!empty($env['post'])) {
-    if (!empty($env['post'])) {
-        foreach ($env['post'] as $key => $value) {
-            $_POST[$key] = $value;
-        }
+    foreach ($env['post'] as $key => $value) {
+        $_POST[$key] = $value;
     }
 }
 
@@ -58,5 +56,10 @@ if (!empty($env['headers'])) {
 // Disable CRON tasks to avoid parallel processes running on an empty database.
 define('DISABLE_WP_CRON', true);
 
-// Set an environment variable to singnal the context of the request.
+// Set an environment variable to signal the context of the request.
 putenv('WPBROWSER_HOST_REQUEST=1');
+
+// If the `uopz` extension is installed, then allow `exit` and `die` to work normally.
+if (function_exists('uopz_allow_exit')) {
+    uopz_allow_exit(true);
+}

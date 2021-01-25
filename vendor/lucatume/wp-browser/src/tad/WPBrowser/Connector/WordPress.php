@@ -1,4 +1,9 @@
 <?php
+/**
+ * A framework browser.
+ *
+ * @package tad\WPBrowser\Connector
+ */
 
 namespace tad\WPBrowser\Connector;
 
@@ -8,40 +13,74 @@ use Symfony\Component\BrowserKit\CookieJar;
 use Symfony\Component\BrowserKit\History;
 use Symfony\Component\BrowserKit\Request;
 use Symfony\Component\BrowserKit\Response;
-use Symfony\Component\Process\Process;
 use tad\WPBrowser\Module\Support\UriToIndexMapper;
+use tad\WPBrowser\Process\Process;
 
+// phpcs:disable
+/**
+ * Triggers the autoload of the InnerBrowser class, if not already loaded, to make sure the Symfony component
+ * aliases are set up by the Codeception library layer.
+ */
+class_exists( 'Codeception\Lib\InnerBrowser', true );
+// phpcs:enable
+
+/**
+ * Class WordPress
+ *
+ * @package tad\WPBrowser\Connector
+ */
 class WordPress extends Universal
 {
     /**
+     * Whether requests should be done in isolation or not.
+     *
      * @var bool
      */
     protected $insulated = true;
 
     /**
+     * The current URL.
+     *
      * @var string
      */
     protected $url;
 
     /**
+     * The current domain.
+     *
      * @var string
      */
     protected $domain;
 
     /**
-     * @var array
+     * An array of the current headers.
+     *
+     * @var array<string,string>
      */
     protected $headers;
 
     /**
+     * The current document root.
+     *
      * @var string
      */
     protected $rootFolder;
+
     /**
+     * The URI ot file mapper.
+     *
      * @var UriToIndexMapper
      */
     protected $uriToIndexMapper;
 
+    /**
+     * WordPress constructor.
+     *
+     * @param array<string,mixed>   $server           The $_SERVER input.
+     * @param History|null          $history          The history input.
+     * @param CookieJar|null        $cookieJar        The cookies jar.
+     * @param UriToIndexMapper|null $uriToIndexMapper The URI to URL index mapper.
+     */
     public function __construct(
         array $server = array(),
         History $history = null,
@@ -53,9 +92,13 @@ class WordPress extends Universal
     }
 
     /**
-     * @param Request $request
+     * Executes the current reques in process.
      *
-     * @return Response
+     * @param Request $request The request object.
+     *
+     * @return Response The request response.
+     *
+     * @throws \RuntimeException If the request URI could not be parsed.
      */
     public function doRequestInProcess($request)
     {
@@ -70,9 +113,14 @@ class WordPress extends Universal
         $requestFiles = $this->remapFiles($request->getFiles());
 
         $parseResult = parse_url($request->getUri());
-        $uri = $parseResult["path"];
-        if (array_key_exists("query", $parseResult)) {
-            $uri .= "?" . $parseResult["query"];
+
+        if ($parseResult === false) {
+            throw new \RuntimeException('Request URI could not be parsed.');
+        }
+
+        $uri = isset($parseResult['path']) ? $parseResult['path'] : '/';
+        if (array_key_exists('query', $parseResult)) {
+            $uri .= '?' . $parseResult['query'];
         }
 
         $requestRequestArray = $this->remapRequestParameters($request->getParameters());
@@ -111,7 +159,7 @@ class WordPress extends Universal
             ' ' . escapeshellarg(base64_encode(serialize($env)));
 
         $process = new Process($command);
-        $process->run();
+        $process->execute();
         $rawProcessOutput = $process->getOutput();
 
         $unserializedResponse = @unserialize(base64_decode($rawProcessOutput));
@@ -135,13 +183,21 @@ class WordPress extends Universal
         return $response;
     }
 
-    private function replaceSiteUrlDeep($array, $url)
+    /**
+     * Replaces the site URL with the mock one recursively.
+     *
+     * @param array<string,mixed> $input The array to replace the URL in.
+     * @param string              $url   The URL to replace.
+     *
+     * @return array<string,mixed> The input array with the URL replaced.
+     */
+    protected function replaceSiteUrlDeep($input, $url)
     {
-        if (empty($array)) {
+        if (empty($input)) {
             return [];
         }
         $replaced = [];
-        foreach ($array as $key => $value) {
+        foreach ($input as $key => $value) {
             if (is_array($value)) {
                 $replaced[$key] = $this->replaceSiteUrlDeep($value, $url);
             } else {
@@ -152,28 +208,56 @@ class WordPress extends Universal
         return $replaced;
     }
 
+    /**
+     * Sets the base URL.
+     *
+     * @param string $url The base URL.
+     *
+     * @return void
+     */
     public function setUrl($url)
     {
         $this->url = $url;
     }
 
+    /**
+     * Sets the index file for a URI request.
+     *
+     * @param string $uri The request URI.
+     *
+     * @return void
+     */
     public function setIndexFor($uri)
     {
         $this->index = $this->rootFolder . $this->uriToIndexMapper->getIndexForUri($uri);
     }
 
+    /**
+     * Returns the current index file.
+     *
+     * @return string The current index file.
+     */
     public function getIndex()
     {
         return $this->index;
     }
 
+    /**
+     * Returns the current root directory.
+     *
+     * @return string The current root directory.
+     */
     public function getRootFolder()
     {
         return $this->rootFolder;
     }
 
     /**
-     * @param string $rootFolder
+     * Sets the root directory.
+     *
+     * @param string $rootFolder The new root directory.
+     *
+     * @return void
      */
     public function setRootFolder($rootFolder)
     {
@@ -184,26 +268,55 @@ class WordPress extends Universal
         $this->uriToIndexMapper->setRoot($rootFolder);
     }
 
+    /**
+     * Returns the current request headers.
+     *
+     * @return array<string,mixed> The current request headers.
+     */
     public function getHeaders()
     {
         return $this->headers;
     }
 
+    /**
+     * Sets the request headers.
+     *
+     * @param array<string,string> $headers The request headers.
+     *
+     * @return void
+     */
     public function setHeaders(array $headers = [])
     {
         $this->headers = $headers;
     }
 
+    /**
+     * Returns the current domain.
+     *
+     * @return string The current domain.
+     */
     public function getDomain()
     {
         return $this->domain;
     }
 
+    /**
+     * Sets the current domain.
+     *
+     * @param string $domain The current domain.
+     *
+     * @return void
+     */
     public function setDomain($domain)
     {
         $this->domain = $domain;
     }
 
+    /**
+     * Resets the cookies.
+     *
+     * @return void
+     */
     public function resetCookies()
     {
         $this->cookieJar = new CookieJar();

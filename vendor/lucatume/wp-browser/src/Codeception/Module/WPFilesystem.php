@@ -1,32 +1,46 @@
 <?php
-
+/**
+ * WordPress specific filesystem operations.
+ *
+ * @package Codeception\Module
+ */
 
 namespace Codeception\Module;
 
 use Codeception\Exception\ModuleConfigException;
 use Codeception\Exception\ModuleException;
 use Codeception\TestInterface;
-use PHPUnit\Framework\Assert;
+use PHPUnit\Framework\Assert as PHPUnitAssert;
+use tad\WPBrowser\Adapters\PHPUnit\Framework\Assert;
 use tad\WPBrowser\Filesystem\Utils;
 use function tad\WPBrowser\buildDate;
+use function tad\WPBrowser\requireCodeceptionModules;
+use function tad\WPBrowser\rrmdir;
+use function tad\WPBrowser\unleadslashit;
+use function tad\WPBrowser\untrailslashit;
+
+//phpcs:disable
+requireCodeceptionModules('WPFilesystem', [ 'Filesystem' ]);
+//phpcs:enable
 
 /**
  * Class WPFilesystem
- *
- * WordPress specific filesystem operations.
  *
  * @package Codeception\Module
  */
 class WPFilesystem extends Filesystem
 {
-
     /**
-     * @var array
+     * A list of the module required fields.
+     *
+     * @var array<string>
      */
     protected $requiredFields = ['wpRootFolder'];
 
     /**
-     * @var array
+     * The default module configuration.
+     *
+     * @var array<string,string>
      */
     protected $config = [
         'themes' => '/wp-content/themes',
@@ -36,15 +50,28 @@ class WPFilesystem extends Filesystem
     ];
 
     /**
-     * @var array
+     * A list of paths to clean after the tests.
+     *
+     * @var array<string>
      */
     protected $toClean = [];
 
     /**
+     * The current count of generated test plugins.
+     *
      * @var int
      */
     protected $testPluginCount = 0;
 
+    /**
+     * Runs before each test.
+     *
+     * @param TestInterface $test The current test.
+     *
+     * @return void
+     *
+     * @throws ModuleConfigException If there's an issue with the module configuration.
+     */
     public function _before(TestInterface $test)
     {
         $this->ensureOptionalPaths(false);
@@ -54,6 +81,8 @@ class WPFilesystem extends Filesystem
      * Sets and checks that the optional paths, if set, are actually valid.
      *
      * @param bool $check Whether to check the paths for existence or not.
+     *
+     * @return void
      *
      * @throws \Codeception\Exception\ModuleConfigException If one of the paths does not exist.
      */
@@ -77,7 +106,7 @@ class WPFilesystem extends Filesystem
                 'default' => '/wp-content/uploads',
             ],
         ];
-        $wpRoot = Utils::untrailslashit($this->config['wpRootFolder']);
+        $wpRoot = untrailslashit($this->config['wpRootFolder']);
         foreach ($optionalPaths as $configKey => $info) {
             if (empty($this->config[$configKey])) {
                 $path = $info['default'];
@@ -85,7 +114,7 @@ class WPFilesystem extends Filesystem
                 $path = $this->config[$configKey];
             }
             if (!is_dir($path) || ($configKey === 'mu-plugins' && !is_dir(dirname($path)))) {
-                $path = Utils::unleadslashit(str_replace($wpRoot, '', $path));
+                $path = unleadslashit(str_replace($wpRoot, '', $path));
                 $absolutePath = $wpRoot . DIRECTORY_SEPARATOR . $path;
             } else {
                 $absolutePath = $path;
@@ -104,10 +133,17 @@ class WPFilesystem extends Filesystem
                 }
             }
 
-            $this->config[$configKey] = Utils::untrailslashit($absolutePath) . DIRECTORY_SEPARATOR;
+            $this->config[$configKey] = untrailslashit($absolutePath) . DIRECTORY_SEPARATOR;
         }
     }
 
+    /**
+     * Initializes the module before the tests.
+     *
+     * @return void
+     *
+     * @throws ModuleConfigException If the path to WordPress or the optional paths are not correct.
+     */
     public function _initialize()
     {
         $this->ensureWpRootFolder();
@@ -119,13 +155,15 @@ class WPFilesystem extends Filesystem
      *
      * @throws \Codeception\Exception\ModuleConfigException if the WordPress root folder does not exist
      *                                                      or is not a valid WordPress root folder.
+     *
+     * @return void
      */
     protected function ensureWpRootFolder()
     {
         $wpRoot = $this->config['wpRootFolder'];
 
         if (!is_dir($wpRoot)) {
-            $wpRoot = codecept_root_dir(Utils::unleadslashit($wpRoot));
+            $wpRoot = codecept_root_dir(unleadslashit($wpRoot));
         }
 
         $message = "[{$wpRoot}] is not a valid WordPress root folder.\n\nThe WordPress root folder is the one that "
@@ -139,14 +177,29 @@ class WPFilesystem extends Filesystem
             throw new ModuleConfigException(__CLASS__, $message);
         }
 
-        $this->config['wpRootFolder'] = Utils::untrailslashit($wpRoot) . DIRECTORY_SEPARATOR;
+        $this->config['wpRootFolder'] = untrailslashit($wpRoot) . DIRECTORY_SEPARATOR;
     }
 
+    /**
+     * Runs after a test failure.
+     *
+     * @param TestInterface $test The test that just ran.
+     * @param \Exception    $fail The failure
+     *
+     * @return void;
+     */
     public function _failed(TestInterface $test, $fail)
     {
         $this->_after($test);
     }
 
+    /**
+     * Runs after each test.
+     *
+     * @param TestInterface $test The test that just ran.
+     *
+     * @return void
+     */
     public function _after(TestInterface $test)
     {
         if (!empty($this->toClean)) {
@@ -174,6 +227,8 @@ class WPFilesystem extends Filesystem
      *
      * @param string $path The path, relative to the site uploads folder.
      *
+     * @return void
+     *
      * @throws \Exception If the path is a date string and is not parsable by the `strtotime` function.
      */
     public function amInUploadsPath($path = null)
@@ -182,8 +237,8 @@ class WPFilesystem extends Filesystem
             $path = $this->config['uploads'];
         } else {
             $path = (string)$path;
-            if (is_dir($this->config['uploads'] . DIRECTORY_SEPARATOR . Utils::unleadslashit($path))) {
-                $path = $this->config['uploads'] . DIRECTORY_SEPARATOR . Utils::unleadslashit($path);
+            if (is_dir($this->config['uploads'] . DIRECTORY_SEPARATOR . unleadslashit($path))) {
+                $path = $this->config['uploads'] . DIRECTORY_SEPARATOR . unleadslashit($path);
             } else {
                 // time based?
                 $date = buildDate($path);
@@ -215,11 +270,13 @@ class WPFilesystem extends Filesystem
      *
      * @param string $filename The file path, relative to the uploads folder or the current folder.
      * @param string|int $date A string compatible with `strtotime` or a Unix timestamp.
+     *
+     * @return void
      */
     public function seeUploadedFileFound($filename, $date = null)
     {
         $path = $this->getUploadsPath($filename, $date);
-        Assert::assertFileExists($path);
+        PHPUnitAssert::assertFileExists($path);
     }
 
     /**
@@ -244,13 +301,13 @@ class WPFilesystem extends Filesystem
             $this->buildDateFrag($date)
             : '';
 
-        $uploads = Utils::untrailslashit($this->config['uploads']);
+        $uploads = untrailslashit($this->config['uploads']);
         $path = $file;
         if (false === strpos($file, $uploads)) {
             $path = implode(DIRECTORY_SEPARATOR, array_filter([
                 $uploads,
                 $dateFrag,
-                Utils::unleadslashit($file),
+                unleadslashit($file),
             ]));
         }
 
@@ -290,10 +347,12 @@ class WPFilesystem extends Filesystem
      *
      * @param string $file The file path, relative to the uploads folder or the current folder.
      * @param string|int $date A string compatible with `strtotime` or a Unix timestamp.
+     *
+     * @return void
      */
     public function dontSeeUploadedFileFound($file, $date = null)
     {
-        Assert::assertFileNotExists($this->getUploadsPath($file, $date));
+        Assert::assertFileDoesNotExist($this->getUploadsPath($file, $date));
     }
 
     /**
@@ -311,10 +370,12 @@ class WPFilesystem extends Filesystem
      * @param string $file The file path, relative to the uploads folder or the current folder.
      * @param string $contents The expected file contents or part of them.
      * @param string|int $date A string compatible with `strtotime` or a Unix timestamp.
+     *
+     * @return void
      */
     public function seeInUploadedFile($file, $contents, $date = null)
     {
-        Assert::assertStringEqualsFile(
+        PHPUnitAssert::assertStringEqualsFile(
             $this->getUploadsPath(
                 $file,
                 $date
@@ -338,10 +399,12 @@ class WPFilesystem extends Filesystem
      * @param string $file The file path, relative to the uploads folder or the current folder.
      * @param string $contents The not expected file contents or part of them.
      * @param string|int $date A string compatible with `strtotime` or a Unix timestamp.
+     *
+     * @return void
      */
     public function dontSeeInUploadedFile($file, $contents, $date = null)
     {
-        Assert::assertStringNotEqualsFile(
+        PHPUnitAssert::assertStringNotEqualsFile(
             $this->getUploadsPath(
                 $file,
                 $date
@@ -364,6 +427,8 @@ class WPFilesystem extends Filesystem
      *
      * @param  string               $dir  The path to the directory to delete, relative to the uploads folder.
      * @param  string|int|\DateTime $date The date of the uploads to delete, will default to `now`.
+     *
+     * @return void
      */
     public function deleteUploadedDir($dir, $date = null)
     {
@@ -386,6 +451,8 @@ class WPFilesystem extends Filesystem
      *
      * @param string $file The file path, relative to the uploads folder or the current folder.
      * @param string|int $date A string compatible with `strtotime` or a Unix timestamp.
+     *
+     * @return void
      */
     public function deleteUploadedFile($file, $date = null)
     {
@@ -407,6 +474,8 @@ class WPFilesystem extends Filesystem
      *
      * @param  string               $dir  The path to the directory to delete, relative to the uploads folder.
      * @param  string|int|\DateTime $date The date of the uploads to delete, will default to `now`.
+     *
+     * @return void
      */
     public function cleanUploadsDir($dir = null, $date = null)
     {
@@ -432,6 +501,8 @@ class WPFilesystem extends Filesystem
      * @param  string $src The path to the source file, relative to the current uploads folder.
      * @param  string $dst The path to the destination file, relative to the current uploads folder.
      * @param  string|int|\DateTime $date The date of the uploads to delete, will default to `now`.
+     *
+     * @return void
      */
     public function copyDirToUploads($src, $dst, $date = null)
     {
@@ -492,6 +563,8 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $filename The path to the file, relative to the current uploads folder.
      * @param  string|int|\DateTime $date The date of the uploads to delete, will default to `now`.
+     *
+     * @return void
      */
     public function openUploadedFile($filename, $date = null)
     {
@@ -507,10 +580,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $path The folder path, relative to the root uploads folder, to change to.
+     *
+     * @return void
      */
     public function amInPluginPath($path)
     {
-        $this->amInPath($this->config['plugins'] . DIRECTORY_SEPARATOR . Utils::unleadslashit($path));
+        $this->amInPath($this->config['plugins'] . DIRECTORY_SEPARATOR . unleadslashit($path));
     }
 
     /**
@@ -524,12 +599,14 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $src The path to the source directory to copy.
      * @param  string $pluginDst The destination path, relative to the plugins root folder.
+     *
+     * @return void
      */
     public function copyDirToPlugin($src, $pluginDst)
     {
         $this->copyDir(
             $src,
-            $this->config['plugins'] . Utils::unleadslashit($pluginDst)
+            $this->config['plugins'] . unleadslashit($pluginDst)
         );
     }
 
@@ -542,10 +619,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $file The folder path, relative to the plugins root folder.
+     *
+     * @return void
      */
     public function deletePluginFile($file)
     {
-        $this->deleteFile($this->config['plugins'] . Utils::unleadslashit($file));
+        $this->deleteFile($this->config['plugins'] . unleadslashit($file));
     }
 
     /**
@@ -558,11 +637,13 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $file The path to the file, relative to the plugins root folder.
      * @param  string $data The data to write in the file.
+     *
+     * @return void
      */
     public function writeToPluginFile($file, $data)
     {
         $this->writeToFile(
-            $this->config['plugins'] . Utils::unleadslashit($file),
+            $this->config['plugins'] . unleadslashit($file),
             $data
         );
     }
@@ -576,10 +657,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $file The path to the file, relative to the plugins root folder.
+     *
+     * @return void
      */
     public function dontSeePluginFileFound($file)
     {
-        $this->dontSeeFileFound($this->config['plugins'] . Utils::unleadslashit($file));
+        $this->dontSeeFileFound($this->config['plugins'] . unleadslashit($file));
     }
 
     /**
@@ -591,10 +674,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $file The path to the file, relative to thep plugins root folder.
+     *
+     * @return void
      */
     public function seePluginFileFound($file)
     {
-        $this->seeFileFound($this->config['plugins'] . Utils::unleadslashit($file));
+        $this->seeFileFound($this->config['plugins'] . unleadslashit($file));
     }
 
     /**
@@ -607,11 +692,13 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $file The path to the file, relative to the plugins root folder.
      * @param  string $contents The contents to check the file for.
+     *
+     * @return void
      */
     public function seeInPluginFile($file, $contents)
     {
-        Assert::assertStringEqualsFile(
-            $this->config['plugins'] . Utils::unleadslashit($file),
+        PHPUnitAssert::assertStringEqualsFile(
+            $this->config['plugins'] . unleadslashit($file),
             $contents
         );
     }
@@ -626,11 +713,13 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $file The path to the file, relative to the plugins root folder.
      * @param  string $contents The contents to check the file for.
+     *
+     * @return void
      */
     public function dontSeeInPluginFile($file, $contents)
     {
-        Assert::assertStringNotEqualsFile(
-            $this->config['plugins'] . Utils::unleadslashit($file),
+        PHPUnitAssert::assertStringNotEqualsFile(
+            $this->config['plugins'] . unleadslashit($file),
             $contents
         );
     }
@@ -644,10 +733,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $dir The path to the folder, relative to the plugins root folder.
+     *
+     * @return void
      */
     public function cleanPluginDir($dir)
     {
-        $this->cleanDir($this->config['plugins'] . Utils::unleadslashit($dir));
+        $this->cleanDir($this->config['plugins'] . unleadslashit($dir));
     }
 
     /**
@@ -659,10 +750,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $path The path to the theme folder, relative to themes root folder.
+     *
+     * @return void
      */
     public function amInThemePath($path)
     {
-        $this->amInPath($this->config['themes'] . DIRECTORY_SEPARATOR . Utils::unleadslashit($path));
+        $this->amInPath($this->config['themes'] . DIRECTORY_SEPARATOR . unleadslashit($path));
     }
 
     /**
@@ -675,12 +768,14 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $src The path to the source file.
      * @param  string $themeDst The path to the destination folder, relative to the themes root folder.
+     *
+     * @return void
      */
     public function copyDirToTheme($src, $themeDst)
     {
         $this->copyDir(
             $src,
-            $this->config['themes'] . Utils::unleadslashit($themeDst)
+            $this->config['themes'] . unleadslashit($themeDst)
         );
     }
 
@@ -693,10 +788,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $file The path to the file to delete, relative to the themes root folder.
+     *
+     * @return void
      */
     public function deleteThemeFile($file)
     {
-        $this->deleteFile($this->config['themes'] . Utils::unleadslashit($file));
+        $this->deleteFile($this->config['themes'] . unleadslashit($file));
     }
 
     /**
@@ -709,11 +806,13 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $file The path to the file, relative to the themese root folder.
      * @param  string $data The data to write to the file.
+     *
+     * @return void
      */
     public function writeToThemeFile($file, $data)
     {
         $this->writeToFile(
-            $this->config['themes'] . Utils::unleadslashit($file),
+            $this->config['themes'] . unleadslashit($file),
             $data
         );
     }
@@ -727,10 +826,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $file The path to the file, relative to the themes root folder.
+     *
+     * @return void
      */
     public function dontSeeThemeFileFound($file)
     {
-        $this->dontSeeFileFound($this->config['themes'] . Utils::unleadslashit($file));
+        $this->dontSeeFileFound($this->config['themes'] . unleadslashit($file));
     }
 
     /**
@@ -742,10 +843,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $file The path to the file, relative to the themes root folder.
+     *
+     * @return void
      */
     public function seeThemeFileFound($file)
     {
-        $this->seeFileFound($this->config['themes'] . Utils::unleadslashit($file));
+        $this->seeFileFound($this->config['themes'] . unleadslashit($file));
     }
 
     /**
@@ -760,11 +863,13 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $file The path to the file, relative to the themes root folder.
      * @param  string $contents The contents to check the file for.
+     *
+     * @return void
      */
     public function seeInThemeFile($file, $contents)
     {
-        Assert::assertStringEqualsFile(
-            $this->config['themes'] . Utils::unleadslashit($file),
+        PHPUnitAssert::assertStringEqualsFile(
+            $this->config['themes'] . unleadslashit($file),
             $contents
         );
     }
@@ -779,11 +884,13 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $file The path to the file, relative to the themes root folder.
      * @param  string $contents The contents to check the file for.
+     *
+     * @return void
      */
     public function dontSeeInThemeFile($file, $contents)
     {
-        Assert::assertStringNotEqualsFile(
-            $this->config['themes'] . Utils::unleadslashit($file),
+        PHPUnitAssert::assertStringNotEqualsFile(
+            $this->config['themes'] . unleadslashit($file),
             $contents
         );
     }
@@ -797,10 +904,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $dir The path to the folder, relative to the themese root folder.
+     *
+     * @return void
      */
     public function cleanThemeDir($dir)
     {
-        $this->cleanDir($this->config['themes'] . Utils::unleadslashit($dir));
+        $this->cleanDir($this->config['themes'] . unleadslashit($dir));
     }
 
     /**
@@ -812,10 +921,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $path The path to the folder, relative to the mu-plugins root folder.
+     *
+     * @return void
      */
     public function amInMuPluginPath($path)
     {
-        $this->amInPath($this->config['mu-plugins'] . DIRECTORY_SEPARATOR . Utils::unleadslashit($path));
+        $this->amInPath($this->config['mu-plugins'] . DIRECTORY_SEPARATOR . unleadslashit($path));
     }
 
     /**
@@ -828,12 +939,14 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $src The path to the source file to copy.
      * @param  string $pluginDst The path to the destination folder, relative to the mu-plugins root folder.
+     *
+     * @return void
      */
     public function copyDirToMuPlugin($src, $pluginDst)
     {
         $this->copyDir(
             $src,
-            $this->config['mu-plugins'] . Utils::unleadslashit($pluginDst)
+            $this->config['mu-plugins'] . unleadslashit($pluginDst)
         );
     }
 
@@ -846,10 +959,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $file The path to the file, relative to the mu-plugins root folder.
+     *
+     * @return void
      */
     public function deleteMuPluginFile($file)
     {
-        $this->deleteFile($this->config['mu-plugins'] . Utils::unleadslashit($file));
+        $this->deleteFile($this->config['mu-plugins'] . unleadslashit($file));
     }
 
     /**
@@ -862,11 +977,13 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $file The path to the destination file, relative to the mu-plugins root folder.
      * @param  string $data The data to write to the file.
+     *
+     * @return void
      */
     public function writeToMuPluginFile($file, $data)
     {
         $this->writeToFile(
-            $this->config['mu-plugins'] . Utils::unleadslashit($file),
+            $this->config['mu-plugins'] . unleadslashit($file),
             $data
         );
     }
@@ -880,10 +997,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $file The path to the file, relative to the mu-plugins folder.
+     *
+     * @return void
      */
     public function dontSeeMuPluginFileFound($file)
     {
-        $this->dontSeeFileFound($this->config['mu-plugins'] . Utils::unleadslashit($file));
+        $this->dontSeeFileFound($this->config['mu-plugins'] . unleadslashit($file));
     }
 
     /**
@@ -895,10 +1014,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $file The path to the file, relative to the mu-plugins folder.
+     *
+     * @return void
      */
     public function seeMuPluginFileFound($file)
     {
-        $this->seeFileFound($this->config['mu-plugins'] . Utils::unleadslashit($file));
+        $this->seeFileFound($this->config['mu-plugins'] . unleadslashit($file));
     }
 
     /**
@@ -911,11 +1032,13 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $file The path the file, relative to the mu-plugins root folder.
      * @param  string $contents The contents to check the file for.
+     *
+     * @return void
      */
     public function seeInMuPluginFile($file, $contents)
     {
-        Assert::assertStringEqualsFile(
-            $this->config['mu-plugins'] . Utils::unleadslashit($file),
+        PHPUnitAssert::assertStringEqualsFile(
+            $this->config['mu-plugins'] . unleadslashit($file),
             $contents
         );
     }
@@ -930,11 +1053,13 @@ class WPFilesystem extends Filesystem
      *
      * @param  string $file The path to the file, relative to the mu-plugins root folder.
      * @param  string $contents The contents to check the file for.
+     *
+     * @return void
      */
     public function dontSeeInMuPluginFile($file, $contents)
     {
-        Assert::assertStringNotEqualsFile(
-            $this->config['mu-plugins'] . Utils::unleadslashit($file),
+        PHPUnitAssert::assertStringNotEqualsFile(
+            $this->config['mu-plugins'] . unleadslashit($file),
             $contents
         );
     }
@@ -948,10 +1073,12 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param  string $dir The path to the directory, relative to the mu-plugins root folder.
+     *
+     * @return void
      */
     public function cleanMuPluginDir($dir)
     {
-        $this->cleanDir($this->config['mu-plugins'] . Utils::unleadslashit($dir));
+        $this->cleanDir($this->config['mu-plugins'] . unleadslashit($dir));
     }
 
     /**
@@ -973,18 +1100,34 @@ class WPFilesystem extends Filesystem
      *
      * @throws ModuleException If the plugin folder and/or files could not be created.
      *
+     * @return void
      */
     public function havePlugin($path, $code)
     {
-        $fullPath = $this->config['plugins'] . Utils::unleadslashit($path);
-        $dir = dirname($fullPath);
-        if (!@mkdir($dir, 0777, true) && !is_dir($dir)) {
-            throw new ModuleException(
-                __CLASS__,
-                "Could not create [{$dir}] plugin folder."
-            );
+        $path = str_replace('\\', '/', $path);
+        $fullPath = $this->config['plugins'] . unleadslashit($path);
+
+        if (!isset(pathinfo($fullPath)['extension'])) {
+            $fullPath .= '.php';
         }
-        $slug = basename(dirname($path));
+
+        if (strpos($path, '/') === false) {
+            $slug = pathinfo($fullPath, PATHINFO_FILENAME);
+            $toClean = $fullPath;
+        } else {
+            $slug = basename(dirname($path));
+            $dir = dirname($fullPath);
+
+            if (!@mkdir($dir, 0777, true) && !is_dir($dir)) {
+                throw new ModuleException(
+                    __CLASS__,
+                    "Could not create [{$dir}] plugin folder."
+                );
+            }
+
+            $toClean = $dir;
+        }
+
         $code = $this->removeOpeningPhpTag($code);
         $name = $slug;
         $contents = <<<PHP
@@ -1006,7 +1149,7 @@ PHP;
             );
         }
 
-        $this->toClean[] = $dir;
+        $this->toClean[] = $toClean;
     }
 
     /**
@@ -1027,10 +1170,17 @@ PHP;
      * @param string $code     The content of the plugin file with or without the opening PHP tag.
      *
      * @throws ModuleException If the mu-plugin folder and/or files could not be created.
+     *
+     * @return void
      */
     public function haveMuPlugin($filename, $code)
     {
-        $fullPath = $this->config['mu-plugins'] . Utils::unleadslashit($filename);
+        $fullPath = $this->config['mu-plugins'] . unleadslashit($filename);
+
+        if (!isset(pathinfo($fullPath)['extension'])) {
+            $fullPath .= '.php';
+        }
+
         $dir = dirname($fullPath);
 
         if (!file_exists($dir)) {
@@ -1089,10 +1239,12 @@ PHP;
      * @param string $functionsFileCode The content of the theme functions.php file with or without the opening PHP tag.
      *
      * @throws ModuleException If the mu-plugin folder and/or files could not be created.
+     *
+     * @return void
      */
     public function haveTheme($folder, $indexFileCode, $functionsFileCode = '')
     {
-        $dir = $this->config['themes'] . Utils::untrailslashit(Utils::unleadslashit($folder));
+        $dir = $this->config['themes'] . untrailslashit(unleadslashit($folder));
         $styleFile = $dir . DIRECTORY_SEPARATOR . 'style.css';
         $indexFile = $dir . DIRECTORY_SEPARATOR . 'index.php';
         $functionsFile = $dir . DIRECTORY_SEPARATOR . 'functions.php';
@@ -1163,7 +1315,7 @@ CSS;
      */
     public function getWpRootFolder()
     {
-        return Utils::untrailslashit($this->config['wpRootFolder']);
+        return untrailslashit($this->config['wpRootFolder']);
     }
 
     /**
@@ -1193,14 +1345,14 @@ CSS;
             $this->buildDateFrag($date)
             : '';
 
-        $uploads = Utils::untrailslashit($this->config['uploads']) . "/sites/{$blogId}";
+        $uploads = untrailslashit($this->config['uploads']) . "/sites/{$blogId}";
         $path = $file;
 
         if (false === strpos($file, $uploads)) {
             $path = implode(DIRECTORY_SEPARATOR, array_filter([
                 $uploads,
                 $dateFrag,
-                Utils::unleadslashit($file),
+                unleadslashit($file),
             ]));
         }
 

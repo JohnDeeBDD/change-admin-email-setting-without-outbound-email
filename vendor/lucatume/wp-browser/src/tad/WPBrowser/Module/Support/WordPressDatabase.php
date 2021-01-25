@@ -18,7 +18,7 @@ class WordPressDatabase
     /**
      * The current database connection error message.
      *
-     * @var string
+     * @var string|null
      */
     protected $dbConnectionError;
     /**
@@ -166,6 +166,8 @@ class WordPressDatabase
      * Sets the PDO object to use to run the checks.
      *
      * @param \PDO $pdo The PDO object to use to run the checks.
+     *
+     * @return void
      */
     public function setPDO(\PDO $pdo)
     {

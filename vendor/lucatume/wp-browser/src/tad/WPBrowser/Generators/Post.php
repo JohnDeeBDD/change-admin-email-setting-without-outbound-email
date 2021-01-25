@@ -1,36 +1,43 @@
 <?php
+/**
+ *  Post generation data.
+ *
+ * @package tad\WPBrowser\Generators
+ */
 
-    namespace tad\WPBrowser\Generators;
+namespace tad\WPBrowser\Generators;
 
-    use function tad\WPBrowser\slug;
+use function tad\WPBrowser\slug;
 
-    /**
-     * Generates WordPress posts to be inserted in the database.
-     */
+/**
+ * Class Post
+ *
+ * @package tad\WPBrowser\Generators
+ */
 class Post
 {
+    /**
+     * Builds a post semi-random data.
+     *
+     * @param int                 $id   The post ID.
+     * @param string              $url  The URL of the site to generate a post for.
+     * @param array<int|string,mixed> $data A map of fixed data for the post.
+     *
+     * @return array<int|string,mixed> The post data.
+     */
+    public static function buildPostData($id, $url = 'http://www.example.com', array $data = [])
+    {
+        return array_merge(self::getDefaults($id, $url), $data);
+    }
 
     /**
-     * Generates a WordPress page entry.
+     * Returns a set of default values for the creation of a post.
      *
-     * @param  int $ID The post ID to use.
-     * @param  string $url The site url.
+     * @param int    $id  The post ID to use.
+     * @param string $url The site URL.
      *
-     * @param array $data
-     *
-     * @return array Key/value pairs to be used to insert the page in the database.
+     * @return array<string,mixed> A map of the post creation default values.
      */
-//      public static function makePage(
-//          $ID,
-//          $url = 'http://www.example.com',
-//          array $data = array()
-//      ) {
-//          $defaults = self::getDefaults( $ID, 'page', $url );
-//          self::$count ++;
-//
-//          return array_merge( $defaults, $data );
-//      }
-
     protected static function getDefaults($id, $url)
     {
         $title    = self::generateTitle($id);
@@ -61,46 +68,11 @@ class Post
     }
 
     /**
-     * Generates a page guid.
+     * Generates a post title.
      *
-     * @param  int $ID The page id.
-     * @param  string $url The site url.
+     * @param int $id The post ID.
      *
-     * @return string      The database guid entry.
-     */
-    protected static function generatePageGuid(
-        $ID,
-        $url
-    ) {
-        $guid = rtrim($url, '/') . '/?page_id=' . $ID;
-
-        return $guid;
-    }
-
-    /**
-     * Generates a post guid.
-     *
-     * @param  int $ID The post id.
-     * @param  string $url The site url.
-     *
-     * @return string      The database guid entry.
-     */
-    protected static function generatePostGuid(
-        $ID,
-        $url
-    ) {
-        $guid = rtrim($url, '/') . '/?p=' . $ID;
-
-        return $guid;
-    }
-
-    public static function makePost($id, $url = 'http://www.example.com', array $data = [ ])
-    {
-        return array_merge(self::getDefaults($id, $url), $data);
-    }
-
-    /**
-     * @return string
+     * @return string The generated post title.
      */
     protected static function generateTitle($id)
     {
@@ -108,15 +80,56 @@ class Post
     }
 
     /**
-     * @return string
+     * Generates a post content.
+     *
+     * @param int $id The post ID.
+     *
+     * @return string The generated post content.
      */
     protected static function generateContent($id)
     {
         return sprintf('Post %d content', $id);
     }
 
+    /**
+     * Generates the post excerpt.
+     *
+     * @param int $id The post ID.
+     *
+     * @return string The post excerpt.
+     */
     private static function generateExcerpt($id)
     {
         return sprintf('Post %d excerpt', $id);
+    }
+
+    /**
+     * Generates a page guid.
+     *
+     * @param int    $id  The page id.
+     * @param string $url The site url.
+     *
+     * @return string      The database guid entry.
+     */
+    protected static function generatePageGuid($id, $url)
+    {
+        $guid = rtrim($url, '/') . '/?page_id=' . $id;
+
+        return $guid;
+    }
+
+    /**
+     * Generates a post guid.
+     *
+     * @param int    $id  The post id.
+     * @param string $url The site url.
+     *
+     * @return string      The database guid entry.
+     */
+    protected static function generatePostGuid($id, $url)
+    {
+        $guid = rtrim($url, '/') . '/?p=' . $id;
+
+        return $guid;
     }
 }

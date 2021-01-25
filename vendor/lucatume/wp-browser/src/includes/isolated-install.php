@@ -4,62 +4,19 @@
  *
  */
 
-/**
- * Writes, or overwrites, the Patchwork configuration file if needed.
- *
- * @throws \Codeception\Exception\ModuleException
- */
-function wpbrowser_write_patchwork_config(array $configuration) {
-	$patchworkConfig = [
-		'blacklist' => [
-			// exclude the whole WordPress folder by default
-			rtrim($configuration['constants']['ABSPATH'], '/'),
-			// exclude the project root folder too
-			rtrim($configuration['root'], '/'),
-		],
-		// but include the `wp-includes/load.php` file that defines the function we need to redefine
-		'whitelist' => [$configuration['constants']['ABSPATH'] . 'wp-includes/load.php'],
-	];
-
-	foreach (['WP_PLUGIN_DIR', 'WP_CONTENT_DIR', 'WPMU_PLUGIN_DIR', 'WP_TEMP_DIR'] as $const) {
-		if (isset($configuration['constants'][$const]) && file_exists($configuration['constants'][$const])) {
-			$patchworkConfig['blacklist'][] = rtrim($configuration['constants'][$const], '/');
-		}
-	}
-
-	$patchworkConfig = json_encode($patchworkConfig);
-
-	$patchwordConfigFile                 = __DIR__ . '/patchwork.json';
-	$existingPatchworkFileConfigContents = '';
-	$configExists                        = file_exists($patchwordConfigFile);
-
-	if ($configExists) {
-		if (!is_readable($patchwordConfigFile)) {
-			throw new RuntimeException('WPLoader', "Patchwork configuration file [$patchwordConfigFile] exists but is not readable.");
-		}
-		$existingPatchworkFileConfigContents = file_get_contents($patchwordConfigFile);
-	}
-
-	if (!$configExists || $existingPatchworkFileConfigContents !== $patchworkConfig) {
-		if (!is_writable(dirname($patchwordConfigFile))) {
-			throw new RuntimeException('WPLoader', "Patchwork configuration file [$patchwordConfigFile] cannot be written.");
-		}
-		file_put_contents($patchwordConfigFile, $patchworkConfig);
-	}
-}
-
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
 
 $configuration = unserialize(base64_decode($argv[1]));
 
 $multisite = !empty($argv[2]) ? $argv[2] : false;
 
-// require_once 'vendor/autoload.php';
+// Require the autoload file as passed from the configuration.
 require_once $configuration['autoload'];
 
 if (!empty($multisite)) {
-	wpbrowser_write_patchwork_config($configuration);
-	wpbrowser_include_patchwork();
+	tad\WPBrowser\configurePatchwork(
+		tad\WPBrowser\isolatedInstallPatchworkConfig( $configuration )
+	);
 
 	Patchwork\redefine('is_multisite', function () {
 		global $_is_multisite;
@@ -79,7 +36,7 @@ else {
 	$activePlugins = [];
 }
 
-// If Cron is not disable it's disabled here.
+// If Cron is not disabled, then disable it now.
 if ( ! isset( $configuration['constants']['DISABLE_WP_CRON'] ) ) {
     print( "Disabling cron\n" );
     $configuration['constants']['DISABLE_WP_CRON'] = true;
@@ -97,8 +54,8 @@ foreach ($configuration['constants'] as $key => $value) {
 $table_prefix = WP_TESTS_TABLE_PREFIX;
 
 define('WP_INSTALLING', true);
-//require_once $config_file_path;
-require_once dirname(__FILE__) . '/functions.php';
+
+require_once __DIR__ . '/functions.php';
 
 tests_reset__SERVER();
 
@@ -111,7 +68,7 @@ require_once ABSPATH . '/wp-includes/wp-db.php';
 
 // Override the PHPMailer
 global $phpmailer;
-require_once(dirname(__FILE__) . '/mock-mailer.php');
+require_once( __DIR__ . '/mock-mailer.php');
 $phpmailer = new MockPHPMailer();
 
 /*
@@ -127,7 +84,7 @@ else {
 $wpdb->select(DB_NAME, $wpdb->dbh);
 
 /**
- * Before dropping the tables include the active plugins as those might define
+ * Before dropping/emptying the tables include the active plugins as those might define
  * additional tables that should be dropped.
  **/
 foreach ($activePlugins as $activePlugin) {
@@ -139,26 +96,39 @@ foreach ($activePlugins as $activePlugin) {
 	include_once $path;
 }
 
-echo "\nThe following tables will be dropped: ", "\n\t- ", implode("\n\t- ", $wpdb->tables), "\n";
-
-echo "\nInstalling WordPress...\n";
-
 $wpdb->query("SET FOREIGN_KEY_CHECKS = 0");
 
-foreach ($wpdb->tables() as $table => $prefixed_table) {
-	$wpdb->query("DROP TABLE IF EXISTS $prefixed_table");
+// By default empty the tables, do not drop them.
+$tables_handling = isset( $configuration['tablesHandling'] ) ?
+	$configuration['tablesHandling']
+	: 'empty';
+
+switch ( $tables_handling ) {
+	default;
+	case 'drop':
+		echo "\nThe following tables will be dropped: ", "\n\t- ", implode( "\n\t- ", $wpdb->tables ), "\n";
+		tad\WPBrowser\dropWpTables( $wpdb );
+		break;
+	case 'empty':
+		echo "\nThe following tables will be emptied: ", "\n\t- ", implode( "\n\t- ", $wpdb->tables ), "\n";
+		tad\WPBrowser\emptyWpTables( $wpdb );
+		break;
+	case 'let':
+		echo "\nTables will not be touched.\n";
+		// Do nothing, just let the tables be.
+		break;
 }
 
-foreach ($wpdb->tables('ms_global') as $table => $prefixed_table) {
-	$wpdb->query("DROP TABLE IF EXISTS $prefixed_table");
-
+foreach ( $wpdb->tables( 'ms_global' ) as $table => $prefixed_table ) {
 	// We need to create references to ms global tables.
-	if ($multisite) {
+	if ( $multisite ) {
 		$wpdb->$table = $prefixed_table;
 	}
 }
 
-$wpdb->query("SET FOREIGN_KEY_CHECKS = 1");
+$wpdb->query( "SET FOREIGN_KEY_CHECKS = 1" );
+
+echo "\n\nInstalling WordPress...\n";
 
 // Prefill a permalink structure so that WP doesn't try to determine one itself.
 add_action('populate_options', '_set_default_permalink_structure_for_tests');

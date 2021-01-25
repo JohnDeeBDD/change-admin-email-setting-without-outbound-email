@@ -33,7 +33,7 @@ class WPHealthcheck
     /**
      * The name of the currently active theme.
      *
-     * @var string
+     * @var string|array<string,mixed>
      */
     protected $currentTheme;
 
@@ -47,7 +47,7 @@ class WPHealthcheck
     /**
      * The current mu-plugins information, if any.
      *
-     * @var string
+     * @var string|array<string>
      */
     protected $muPlugins;
 
@@ -60,26 +60,27 @@ class WPHealthcheck
     /**
      * The current plugins information, if any.
      *
-     * @var string
+     * @var array<string,string>
      */
     protected $plugins;
 
     /**
-     * The current plugins error, if any.
+     * The current plugins errors, if any.
      *
-     * @var string
+     * @var string|array<string,array|string>
      */
     protected $pluginsErrors;
 
     /**
      * An instance of the constants wrapper.
      *
-     * @var Constants|null
+     * @var Constants
      */
     protected $constants;
 
     /**
      * Whether to use relative paths or not.
+     *
      * @var bool
      */
     protected $useRelative = false;
@@ -117,7 +118,7 @@ class WPHealthcheck
     /**
      * Runs a battery of checks on the WordPress installation and returns the results.
      *
-     * @return array An array of results, by category.
+     * @return array<string,array> An array of results, by category.
      */
     public function run()
     {
@@ -131,7 +132,7 @@ class WPHealthcheck
     /**
      * Returns an array of WordPress constants and their value or status.
      *
-     * @return array An associative array of WordPress constants and their value/status.
+     * @return array<string,mixed> An associative array of WordPress constants and their value/status.
      */
     protected function getConstants()
     {
@@ -178,7 +179,7 @@ class WPHealthcheck
     /**
      * Returns an array of WordPress globals and their value or status.
      *
-     * @return array An associative array of WordPress globals and their value/status.
+     * @return array<string,mixed> An associative array of WordPress globals and their value/status.
      */
     public function getGlobals()
     {
@@ -190,7 +191,7 @@ class WPHealthcheck
     /**
      * Runs and returns a battery of checks on the site filesystem and status.
      *
-     * @return array An associative array reporting the checks statuses.
+     * @return array<string,string|array> An associative array reporting the checks statuses.
      */
     protected function runChecks()
     {
@@ -276,6 +277,11 @@ class WPHealthcheck
 
         $allTables = $tables->fetchAll(\PDO::FETCH_COLUMN);
 
+        if ($allTables === false) {
+            $this->dbStructureError = 'unable to fetch all the tables from the database.';
+            return false;
+        }
+
         $matchingTables = array_filter($allTables, static function ($table) use ($table_prefix) {
             return strpos($table, $table_prefix) === 0;
         });
@@ -311,7 +317,7 @@ class WPHealthcheck
     /**
      * Returns a list of default multi-site tables.
      *
-     * @return array A list of default multi-site tables, including the table prefix.
+     * @return array<string> A list of default multi-site tables, including the table prefix.
      */
     public function getMultiSiteDefaultTables()
     {
@@ -327,11 +333,12 @@ class WPHealthcheck
     /**
      * Returns a list of default single site tables.
      *
-     * @return array A list of default single site tables, including the table prefix.
+     * @return array<string> A list of default single site tables, including the table prefix.
      */
     public function getSingleSiteDefaultTables()
     {
         $tablePrefix = $this->database->getTablePrefix();
+
         return array_map(static function ($tableName) use ($tablePrefix) {
             return $tablePrefix . $tableName;
         }, Tables::blogTables());
@@ -374,7 +381,7 @@ class WPHealthcheck
 
             if ($blogId === false) {
                 $this->blogNotInstalledError = sprintf(
-                    "Cannot query table [%s] for blog with domain [%s].",
+                    'cannot query table [%s] for blog with domain [%s].',
                     $sitesTable,
                     $domain
                 );
@@ -383,7 +390,7 @@ class WPHealthcheck
 
             if ($blogId->rowCount() === 0) {
                 $this->blogNotInstalledError = sprintf(
-                    "database table [%s] does not contain a blog with domain [%s].",
+                    'database table [%s] does not contain a blog with domain [%s].',
                     $sitesTable,
                     $domain
                 );
@@ -456,7 +463,7 @@ class WPHealthcheck
         $muPluginsFolder = $this->directories->getWpmuPluginsDir();
 
         if (!file_exists($muPluginsFolder)) {
-            $this->muPlugins = "mu-plugins directory({$this->relative($muPluginsFolder)}) does not exist.";
+            $this->muPlugins = "mu-plugins directory ({$this->relative($muPluginsFolder)}) does not exist.";
             return true;
         }
 
@@ -477,6 +484,8 @@ class WPHealthcheck
         foreach ($files as $file) {
             $fileBasenames[] = $file->getBasename();
         }
+
+        sort($fileBasenames);
 
         $this->muPlugins = $fileBasenames;
 
@@ -543,6 +552,9 @@ class WPHealthcheck
             }
         }
 
+        ksort($foundPlugins);
+        ksort($inactivePlugins);
+
         if (count($pluginErrors)) {
             $this->pluginsErrors = array_merge($pluginErrors, $foundPlugins, $inactivePlugins);
             return false;
@@ -560,6 +572,8 @@ class WPHealthcheck
      * Second level paths will always be printed as relative; first-level paths
      *
      * @param bool $useRelativePaths Whether to print all paths as relative paths.
+     *
+     * @return void
      */
     public function useRelativePaths($useRelativePaths)
     {

@@ -1,4 +1,9 @@
 <?php
+/**
+ * The WordPress unit test case template.
+ *
+ * @package Codeception\Lib\Generator
+ */
 
 namespace Codeception\Lib\Generator;
 
@@ -8,14 +13,34 @@ use Codeception\Util\Shared\Namespaces;
 use Codeception\Util\Template;
 use tad\WPBrowser\Compat\Compatibility;
 
+/**
+ * Class WPUnit
+ *
+ * @package Codeception\Lib\Generator
+ */
 class WPUnit extends AbstractGenerator implements GeneratorInterface
 {
     use Classname;
     use Namespaces;
 
+    /**
+     * @var array<string,mixed>
+     */
     protected $settings;
+
+    /**
+     * @var string
+     */
     protected $name;
+
+    /**
+     * @var string
+     */
     protected $baseClass;
+
+    /**
+     * @var string
+     */
     protected $template = <<<EOF
 <?php
 {{namespace}}
@@ -56,6 +81,13 @@ EOF;
      */
     protected $compatibilityLayer;
 
+    /**
+     * WPUnit constructor.
+     *
+     * @param array<string,mixed> $settings The template settings.
+     * @param string $name The template name.
+     * @param string $baseClass The base class.
+     */
     public function __construct($settings, $name, $baseClass)
     {
         parent::__construct($settings);
@@ -65,6 +97,11 @@ EOF;
         $this->compatibilityLayer = new Compatibility();
     }
 
+    /**
+     * Produces and return the rendered template.
+     *
+     * @return string The rendered template.
+     */
     public function produce()
     {
         $ns = $this->getNamespaceHeader($this->settings['namespace'] . '\\' . $this->name);
@@ -84,6 +121,11 @@ EOF;
             ->produce();
     }
 
+    /**
+     * Returns the current tester name.
+     *
+     * @return string The current tester name.
+     */
     protected function getTester()
     {
         if (is_array($this->settings) && isset($this->settings['actor'])) {
@@ -118,6 +160,8 @@ EOF;
      * Injects the compatibility layer object.
      *
      * @param Compatibility $compatibility An instance of the compatibility layer.
+     *
+     * @return void
      */
     public function setCompatibilityLayer(Compatibility $compatibility)
     {

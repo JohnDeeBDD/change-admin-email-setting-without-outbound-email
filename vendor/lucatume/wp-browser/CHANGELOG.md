@@ -4,6 +4,395 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [unreleased] Unreleased
 
+## [3.0.5.1] 2021-01-13;
+
+### Fixed
+
+- Correctly update the code per #482
+
+## [3.0.5] 2021-01-08;
+
+### Changed
+
+- Update the `WPFilesystem::havePlugin` and `WPFilesystem::haveMuPlugin` methods to take a plugin path without requiring the `.php` extension (thanks @Luc45).
+
+## [3.0.4] 2021-01-04;
+
+### Fixed
+- Smaller text fix in Healthcheck component.
+
+### Changed
+- Add more tests to cover URL replacement in `WPDb` module.
+
+## [3.0.3] 2021-01-04;
+
+### Fixed
+
+- Parameter format of the `WPDb` module `seeOptionInDatabase`, `dontSeeOptionInDatabase`, `seeSiteOptionInDatabase`,
+  `dontSeeSiteOptionInDatabase` methods to support both name and value or array criteria.
+
+### Added
+
+- The `WPDb::dontSeeSiteOptionInDatabase` method.
+
+## [3.0.2] 2020-12-08;
+
+### Fixed
+
+- Yaml format issue in scaffoled configuration files, thanks @dale42
+
+## [3.0.1] 2020-12-07;
+
+### Fixed
+
+- Compatibility with PHPUnit version 9.5, thanks @Luc45
+
+## [3.0.0] 2020-12-01;
+
+This version is the first to target Composer version `2` compatibility, while keeping back-compatibility with Composer version `1`.
+The version is marked as breaking, and as such as a Major release, as existing setups that rely on some packages previously bundled
+with wp-browser might break.
+I've changed the removed `wp-cli/wp-cli-bundle` (full wp-cli packages) dependency in favor of the `wp-cli/wp-cli` one and I've removed the `symfony/filesystem`
+dependency in favour of other internal solutions.
+Read the [migration guide here](https://wpbrowser.wptestkit.dev/migration/from-version-2-to-version-3).
+
+### Breaking changes
+
+- Removed the `WithWpCli::executeBackgroundWpCliCommand` method, and, as a consequence, the `WPCLI::executeBackgroundWpCliCommand` method.
+- Removed the `symfony/process` dependency and replaced it with the `mikehaertl/php-shellcommand` one; refactor methods that use and accept shell commands.
+- Refactor the `WPCLI` module to build and escape string command lines differently.
+- Removed the `wp-cli/wp-cli-bundle` dependency and replaced it with the `wp-cli/wp-cli` one.
+
+## [2.6.17] 2020-11-17;
+
+### Fixed
+
+- URL replacement issue in `DbDump` class
+
+## [2.6.16] 2020-10-26;
+
+### Fixed
+
+- handle more Cookie types in `WPBrowser::grabCookiesWithPattern` method to avoid errors.
+
+### Changed
+
+- change DotEnv suggestion to  `vlucas/phpdotenv:^4.0` to avoid env vars loading issues.
+
+## [2.6.15] 2020-10-21;
+
+### Fixed
+
+- avoid deleting the whole plugins folder when `havePlugin` is used to create single file plugins (thanks @Luc45)
+
+## [2.6.14] 2020-10-20;
+
+### Added
+
+- the `logOut(string|bool $redirectTo)` method to the `WPBrowser` and `WPWebDriver` modules (thanks @gabe-connolly)
+
+## [2.6.13] 2020-09-22;
+
+### Fixed
+
+- restore full phpstan lvl 8 coverage
+
+## [2.6.12] 2020-09-17;
+
+### Changed
+
+- rename the `rmkdir` function to `mkdirp` for clarity and resemblance with the WordPress one.
+
+## [2.6.11] 2020-09-15;
+
+### Fixed
+
+- an issue where the `recurseRemoveDir` function would leave empty directories behind, fixes #447
+
+### Added
+
+- the `mkdirp` function to scaffold nested directory structures and files
+
+## [2.6.10] 2020-08-25;
+
+### Fixed
+
+- remove version block on `symfony/filesystem` dependency, fixes #440
+
+## [2.6.9] 2020-08-19;
+
+### Added
+
+- the `WPDb::importSql` method to allow importing custom SQL strings in the database during tests
+
+## [2.6.8] 2020-08-19;
+
+### Fixed
+
+- avoid deprecation notices when loading `MockPHPMailer`, fixes #436
+
+## [2.6.7] 2020-08-14;
+
+### Added
+
+- the `WPDb::havePostThumbnailInDatabase` and `WPDb::dontHavePostThumbnailInDatabase` methods, fixes #434
+
+## [2.6.6] 2020-08-04;
+
+### Fixed
+
+- URL replacement function in `WPDb` module that would incorrectly handling the replacement of `locahost:port` URLs, fixes #430
+
+## [2.6.5] 2020-07-16;
+
+### Fixed
+
+- return type of `WPLoader::factory` method to ensure IDE type-hinting will work correctly (thanks @Luc45)
+
+## [2.6.4] 2020-07-07;
+
+### Fixed
+
+- typos and spacing in documentation (thanks @cliffordp)
+- environment file parsing for empty values, fixes #427
+
+## [2.6.3] 2020-06-30;
+
+### Fixed
+
+- An issue where additional required plugins would not be correctly parsed during the `init wpbrowser` command, fixes #424
+
+## [2.6.2] 2020-06-19;
+
+### Fixed
+
+- An issue where users created during tests would not be have the correct editing and layout meta set, fixes #422, thanks @ryanshoover  
+
+## [2.6.1] 2020-06-11;
+
+### Fixed
+
+- ensure `$_SERVER['REQUEST_TIME']` and `$_SERVER['REQUEST_TIME_FLOAT']` are correctly set when running tests based on the `Codeception\Test\WPTestCase` class, fixes #417
+
+## [2.6.0] 2020-06-08;
+
+### Added
+
+- support, in `WPTestCase`, for the `@runInSeparateProcess` annotation to run test methods in separate PHP processes; fixes #410
+
+## [2.5.7] 2020-06-02;
+
+### Fixed
+
+- Codeception required version erroneously set in prev version of `composer.json` file
+
+## [2.5.6] 2020-06-02;
+
+### Added
+
+- check in the `codecept init wpbrowser` command to check and report missing Codeception 4.0 to the user during initialization, fixes #412
+
+## [2.5.5] 2020-05-25;
+
+### Changed
+
+- refactoring to pass `phpstan` level `1` and `2` checks.
+
+## [2.5.4] 2020-05-22;
+
+### Fixed
+
+- an issue with .env files handling that, when the `vlucas/phpdotenv` package is not required, would incorrectly set up the test environment.
+
+### Changed
+
+- some refactoring to pass `phpstan` level `0` checks.
+
+## [2.5.3] 2020-05-15;
+
+### Added
+
+- the `WPDb.letCron` configuration parameter to control whether `wp-cron` processes should be allowe to spawn during tests or not (new default).
+
+### Fixed
+
+- the `WPDb` module will set up the database to prevent `wp-cron` requests from being spawned during tests, fixes #363.
+- env file parsing issues reported, fixes #398.
+
+### Changed
+
+- following changes to how the `WPDb` module sets up the database at the start of tests (and between tests), `wp-cron` process will not be spawned during tests unless the `WPDb.letCron` configuration parameter is set to `true`.
+
+## [2.5.2] 2020-05-13;
+
+### Fixed
+
+- added `Dotenv\Dotenv` polyfill class to avoid back-compatibility issues w/ projects not requiring `vlucas/phpdotenv` explicitly and using env files for tests configuration.
+
+## [2.5.1] 2020-05-13;
+
+### Fixed
+
+- add `function_exists` check to avoid redefinition issues when wp-browser is used in two related packages (thanks @cliffordp)
+
+## [2.5.0] 2020-05-11;
+
+### Fixed
+
+* `README.md` file updates (thanks @szepeviktor)
+* `src/tad/scripts` fixes and refactorings (thanks @szepeviktor)
+* cron and admin AJAX query vars handling (thanks @Luc45)
+
+### Removed
+
+* `gumlet/php-image-resize` package requirement; runtime image modification in the `WPDb::haveAttachmentInDatabase` method will require it at runtime.
+* `vlucas/phpdotenv` package requirement; `wp-browser` will not use it internally, but Codeception will keep requiring it for dynamic parameter configuration.
+
+## [2.4.8] 2020-05-01;
+
+### Fixed
+
+- initialization environment vars in the `Wpbrowser` template providing functions for the `codecept init wpbrowser` command
+
+## [2.4.7] 2020-04-23;
+
+### Fixed
+
+- support for Unix sockets in `WPDB` and `WPLoader` modules
+
+### Changed
+
+- the `codecept init wpbrowser` will now scaffold the suites to support both classic MySQL hosts like `1.2.3.4:3306`, container-type hosts like `db` and Unix socket hosts like `localhost:/var/mysql.sock`
+
+## [2.4.6] 2020-04-20;
+
+### Fixed
+
+- PHP 5.6 incompatibility issues introduced in version `2.4.0`, fixes #372
+
+## [2.4.5] 2020-04-15;
+
+### Added
+
+- set the `admin_email_lifespan` option value to prevent showing the administration email verification in the `WPDb` module, after the database is imported; fixes #358
+- `WPDb::EVENT_AFTER_DB_PREPARE` action after an imported datababse is prepared by applying quality-of-testing-life "patches" to the database
+
+## [2.4.4] 2020-04-14;
+
+### Added
+
+- clearer messaging for missing Codeception 4.0 modules in wp-browser modules requiring it, fixes #365 and #360
+
+## [2.4.3] 2020-04-13;
+
+### Fixed
+
+- suites configuration parameter handling in the `tad\WPBrowser\Extension\Events` extension.
+
+## [2.4.2] 2020-04-11;
+
+### Added
+
+- support for the `contentFolder` parameter in the `WPLoader` configuration. This is the equivalent of setting the `WP_CONTENT_DIR` constant in a custom configuration file, fixed #342
+
+### Removed
+
+- internal `tad\WPBrowser\Filesystem\Utils` class in favour of `filesystem` functions
+
+## [2.4.1] 2020-04-10;
+
+### Changed
+
+- an issue where tables created by plugins during the WordPress installation managed by the `WPLoader` module would be dropped; default behaviour changed to emptying the tables, fixes #356
+
+## [2.4.0] 2020-04-10;
+
+### Added
+
+- compatibility with Codeception 4.0
+- the `tad\WPBrowser\Extension\Events` extension to enable subscribing to Codeception 4.0 events
+
+### Fixed
+
+- the event listener and dispatcher system to work consistently across Codeception versions
+- issue where `WPDb::haveUserInDatabase` method would not create all the user meta #359
+
+## [2.3.4] 2020-04-03;
+
+### Fixed
+
+- add deprecated functions handling for functions moved in version `2.3`
+- mark `rrmdir` function as deprecated
+
+## [2.3.3] 2020-04-01;
+
+### Fixed
+
+- `tad\WPBrowser\vendorDir` issue that would cause the function to return wrong value
+
+## [2.3.2] 2020-03-29;
+
+### Fixed
+
+- absolute paths handling in the `configFile` parameter of `WPLoader` configuration
+
+## [2.3.1] 2020-03-29;
+
+### Fixed
+
+- absolute paths handling in the `pluginsFolder` parameter of `WPLoader` configuration
+
+## [2.3.0] 2020-03-29;
+
+### Added
+
+- the `originalUrl` to the `WPDb` module configuration; this can help in some instances where `urlReplacement` is active but is not working correctly.
+- the `tad\WPBrowser\Traits\WithWordPressFilters` trait to provide methods, for test cases, to debug WordPress actions and filter initial and final values.
+- use the `tad\WPBrowser\Traits\WithWordPressFilters` trait in the `WPLoader` module to debug WordPress actions and filter initial and final values.
+
+### Fixed
+
+- an issue that would prevent the site URL from being correctly replaced during `WPDb` module dump imports
+- sanity checks on the `Copier` extension
+
+
+### Changed
+
+- refactoring of utility functions
+- the build system from Travis CI to GitHub Actions, based on Docker
+
+## [2.2.37] 2020-02-21;
+
+### Fixed
+
+- issue in the `WithEvents` trait that would cause issues in the `console` command
+
+## [2.2.36] 2020-02-19;
+
+### Fixed
+
+- issue with `WPDb` and `WPLoader` module in `loadOnly` mode that would cause WPLoader to load WordPress before the correct database setup
+
+## [2.2.35] 2020-02-13;
+
+### Fixed
+
+- issue with setup default values where the default environment file name would be empty or the file would be missing
+
+## [2.2.34] 2020-01-29;
+
+### Fixed
+
+- cache flushing issue in `WPTestCase` (thanks @mitogh)
+
+## [2.2.33] 2019-12-18;
+
+### Fixed
+- `WPDb::haveUserCapabilitiesInDatabase` to make sure entries are not duplicated when called on same user [#335]
+
+### Updated
+- `WPDb::haveUserInDatabase` and `WPDb::haveUserCapabilitiesInDatabase` methods to support more complex user role assignment [#336]
+
 ## [2.2.32] 2019-11-26;
 ### Fixed
 - `WPRestControllerTestCase` issue (thanks @TimothyBJacobs)
@@ -184,7 +573,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - the requirement of the `lucatume/wp-snaphot-assertions` package
 - the `\tad\WPBrowser\Snapshot\WPHtmlOutputDriver` class
 - the `wpcept` binaries
-- `lucatume/wp-snapshot-assertions` dependency 
+- `lucatume/wp-snapshot-assertions` dependency
 - `tad\WPBrowser\Snapshot\WPHtmlOutputDriver` proxy class and  the `lucatume/wp-snapshot-assertions` dependency
 - `wpcept` and `wpcept.bat` deprecated binaries
 - `Codeception\Command\DbSnapshot` command
@@ -331,7 +720,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [1.22.0] 2018-01-26;
 ### Fixed
-- added wait operation to `WPBrowserMethods` to try and tackle the missing login form issue () 
+- added wait operation to `WPBrowserMethods` to try and tackle the missing login form issue ()
 - replace `eventviva/php-image-resize` dependency with `gumlet/php-image-resize`
 - added the `WPHtmlOutputDriver` class to allow comparison of WordPress specific HTML output using the `spatie/phpunit-snapshot-assertions` library
 
@@ -468,7 +857,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - locked `codeception/codeception` version at `~2.2.0` while support for version `2.3` is developed
 - moved the `codeception/codeception` requirement to the `require` section
 - updated the code of `dontHaveInDatabase` type methods of `WPDb` to remove meta of handled objects by default
- 
+
 ## [1.20.0] 2017-05-15
 ### Added
 - added support for "just loading WordPress" to the WPLoader module using the `loadOnly` parameter
@@ -571,7 +960,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - support for the `theme` configuration parameter in the `WPLoader` module configuration
 
 ### Fixed
-- plugin activation/deactivation in `WPBrowser` module, thanks [Ippey](https://github.com/Ippey) 
+- plugin activation/deactivation in `WPBrowser` module, thanks [Ippey](https://github.com/Ippey)
 
 ## [1.16.0] 2016-09-05
 ### Added
@@ -714,8 +1103,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## [1.10.3] 2016-02-22
 ### Added
 - `WPBrowserMethods::amOnAdminPage` method, applies to WPWebDriver and WPBrowser modules
-- `WPBootstrapper::setPermalinkStructureAndFlush` method 
-- `WPBootstrapper::loadWpComponent` method 
+- `WPBootstrapper::setPermalinkStructureAndFlush` method
+- `WPBootstrapper::loadWpComponent` method
 
 ## [1.10.0] 2016-02-18
 ### Modified
@@ -732,7 +1121,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ###Added
 - the `wpunit` test suite to the ones scaffolded by default when using the `bootstrap:pyramid` command
 
-## [1.9.4] 2016-01-20 
+## [1.9.4] 2016-01-20
 ### Fixed
 - proper name of `WPAjaxTestCase` class
 
@@ -858,7 +1247,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 - some `seeInDatabase` method syntax
 
-## [1.7.16a] 2015-11-18 
+## [1.7.16a] 2015-11-18
 ### Fixed
 - the `_delete_all_posts` function in the automated tests bootstrap file now runs without any filters/actions hooked
 
@@ -1177,4 +1566,56 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 [2.2.30]: https://github.com/lucatume/wp-browser/compare/2.2.29...2.2.30
 [2.2.31]: https://github.com/lucatume/wp-browser/compare/2.2.30...2.2.31
 [2.2.32]: https://github.com/lucatume/wp-browser/compare/2.2.31...2.2.32
-[unreleased]: https://github.com/lucatume/wp-browser/compare/2.2.32...HEAD
+[2.2.33]: https://github.com/lucatume/wp-browser/compare/2.2.32...2.2.33
+[2.2.34]: https://github.com/lucatume/wp-browser/compare/2.2.33...2.2.34
+[2.2.35]: https://github.com/lucatume/wp-browser/compare/2.2.34...2.2.35
+[2.2.36]: https://github.com/lucatume/wp-browser/compare/2.2.35...2.2.36
+[2.2.37]: https://github.com/lucatume/wp-browser/compare/2.2.36...2.2.37
+[2.3.0]: https://github.com/lucatume/wp-browser/compare/2.2.37...2.3.0
+[2.3.1]: https://github.com/lucatume/wp-browser/compare/2.3.0...2.3.1
+[2.3.2]: https://github.com/lucatume/wp-browser/compare/2.3.1...2.3.2
+[2.3.3]: https://github.com/lucatume/wp-browser/compare/2.3.2...2.3.3
+[2.3.4]: https://github.com/lucatume/wp-browser/compare/2.3.3...2.3.4
+[2.4.0]: https://github.com/lucatume/wp-browser/compare/2.3.4...2.4.0
+[2.4.1]: https://github.com/lucatume/wp-browser/compare/2.4.0...2.4.1
+[2.4.2]: https://github.com/lucatume/wp-browser/compare/2.4.1...2.4.2
+[2.4.3]: https://github.com/lucatume/wp-browser/compare/2.4.2...2.4.3
+[2.4.4]: https://github.com/lucatume/wp-browser/compare/2.4.3...2.4.4
+[2.4.5]: https://github.com/lucatume/wp-browser/compare/2.4.4...2.4.5
+[2.4.6]: https://github.com/lucatume/wp-browser/compare/2.4.5...2.4.6
+[2.4.7]: https://github.com/lucatume/wp-browser/compare/2.4.6...2.4.7
+[2.4.8]: https://github.com/lucatume/wp-browser/compare/2.4.7...2.4.8
+[2.5.0]: https://github.com/lucatume/wp-browser/compare/2.4.8...2.5.0
+[2.5.1]: https://github.com/lucatume/wp-browser/compare/2.5.0...2.5.1
+[2.5.2]: https://github.com/lucatume/wp-browser/compare/2.5.1...2.5.2
+[2.5.3]: https://github.com/lucatume/wp-browser/compare/2.5.2...2.5.3
+[2.5.4]: https://github.com/lucatume/wp-browser/compare/2.5.3...2.5.4
+[2.5.5]: https://github.com/lucatume/wp-browser/compare/2.5.4...2.5.5
+[2.5.6]: https://github.com/lucatume/wp-browser/compare/2.5.5...2.5.6
+[2.5.7]: https://github.com/lucatume/wp-browser/compare/2.5.6...2.5.7
+[2.6.0]: https://github.com/lucatume/wp-browser/compare/2.5.7...2.6.0
+[2.6.1]: https://github.com/lucatume/wp-browser/compare/2.6.0...2.6.1
+[2.6.2]: https://github.com/lucatume/wp-browser/compare/2.6.1...2.6.2
+[2.6.3]: https://github.com/lucatume/wp-browser/compare/2.6.2...2.6.3
+[2.6.4]: https://github.com/lucatume/wp-browser/compare/2.6.3...2.6.4
+[2.6.5]: https://github.com/lucatume/wp-browser/compare/2.6.4...2.6.5
+[2.6.6]: https://github.com/lucatume/wp-browser/compare/2.6.5...2.6.6
+[2.6.7]: https://github.com/lucatume/wp-browser/compare/2.6.6...2.6.7
+[2.6.8]: https://github.com/lucatume/wp-browser/compare/2.6.7...2.6.8
+[2.6.9]: https://github.com/lucatume/wp-browser/compare/2.6.8...2.6.9
+[2.6.10]: https://github.com/lucatume/wp-browser/compare/2.6.9...2.6.10
+[2.6.11]: https://github.com/lucatume/wp-browser/compare/2.6.10...2.6.11
+[2.6.12]: https://github.com/lucatume/wp-browser/compare/2.6.11...2.6.12
+[2.6.13]: https://github.com/lucatume/wp-browser/compare/2.6.12...2.6.13
+[2.6.14]: https://github.com/lucatume/wp-browser/compare/2.6.13...2.6.14
+[2.6.15]: https://github.com/lucatume/wp-browser/compare/2.6.14...2.6.15
+[2.6.16]: https://github.com/lucatume/wp-browser/compare/2.6.15...2.6.16
+[2.6.17]: https://github.com/lucatume/wp-browser/compare/2.6.16...2.6.17
+[3.0.0]: https://github.com/lucatume/wp-browser/compare/2.6.17...3.0.0
+[3.0.1]: https://github.com/lucatume/wp-browser/compare/3.0.0...3.0.1
+[3.0.2]: https://github.com/lucatume/wp-browser/compare/3.0.1...3.0.2
+[3.0.3]: https://github.com/lucatume/wp-browser/compare/3.0.2...3.0.3
+[3.0.4]: https://github.com/lucatume/wp-browser/compare/3.0.3...3.0.4
+[3.0.5]: https://github.com/lucatume/wp-browser/compare/3.0.4...3.0.5
+[3.0.5.1]: https://github.com/lucatume/wp-browser/compare/3.0.5...3.0.5.1
+[unreleased]: https://github.com/lucatume/wp-browser/compare/3.0.5.1...HEAD

@@ -3,15 +3,23 @@ namespace Codeception\TestCase;
 
 // phpcs:disable
 use Codeception\Exception\ModuleException;
+use Codeception\Module\WPLoader;
 use Codeception\Module\WPQueries;
 use Codeception\Test\Unit;
 use tad\WPBrowser\Compat\Compatibility;
+use tad\WPBrowser\Traits\WithCodeceptionTestCaseEnhancements;
+use tad\WPBrowser\Traits\WithRequestTime;
 
 if (!class_exists('WP_UnitTest_Factory')) {
     require_once dirname(dirname(dirname(__FILE__))) . '/includes/factory.php';
 }
 if (!class_exists('TracTickets')) {
     require_once dirname(dirname(dirname(__FILE__))) . '/includes/trac.php';
+}
+
+// Require the WordPress bootstrap file if not already loaded; this will deal with test methods running in isolation.
+if (!WPLoader::$didInit) {
+	require_once( __DIR__ . '/../../includes/bootstrap.php' );
 }
 
 // Load the PHPUnit compatibility layer.
@@ -30,6 +38,9 @@ require_once __DIR__ . '/../../tad/WPBrowser/phpunit-compat.php';
  */
 class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
 {
+
+    use WithCodeceptionTestCaseEnhancements;
+    use WithRequestTime;
 
     protected static $forced_tickets = array();
     protected static $hooks_saved = array();
@@ -50,6 +61,8 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
 
     public static function _setUpBeforeClass()
     {
+        static::setupForSeparateProcessBeforeClass();
+
         global $wpdb;
 
         $wpdb->suppress_errors = false;
@@ -126,7 +139,13 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
         $wp_object_cache->group_ops = array();
         $wp_object_cache->stats = array();
         $wp_object_cache->memcache_debug = array();
-        $wp_object_cache->cache = array();
+
+        if ($wp_object_cache instanceof \WP_Object_Cache) {
+            $wp_object_cache->flush();
+        } elseif (isset($wp_object_cache->cache)) {
+            $wp_object_cache->cache = [];
+        }
+
         if (method_exists($wp_object_cache, '__remoteset')) {
             $wp_object_cache->__remoteset();
         }
@@ -181,6 +200,9 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
 
     public function _setUp()
     {
+        $this->requestTimeSetUp();
+        $this->checkSeparateProcessConfiguration();
+
         set_time_limit(0);
 
         if (!self::$ignore_files) {
@@ -215,6 +237,8 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
         $this->start_transaction();
         $this->expectDeprecated();
         add_filter('wp_die_handler', array($this, 'get_wp_die_handler'));
+
+        $this->maybeEnhanceTestCaseIfWoDiService();
 
         /**
          * After WordPress has been initialized in the test context initialize the Codeception Unit test case.
@@ -378,7 +402,11 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
 
     public function expectDeprecated()
     {
-        $annotations = $this->getAnnotations();
+        $annotations = \PHPUnit\Util\Test::parseTestMethodAnnotations(
+            get_class($this),
+            $this->name
+        );
+
         foreach (array('class', 'method') as $depth) {
             if (!empty($annotations[$depth]['expectedDeprecated'])) {
                 $this->expected_deprecated = array_merge(
@@ -409,6 +437,11 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
     public function _tearDown()
     {
         global $wpdb, $wp_query, $wp;
+
+        if (empty($wpdb) || !$wpdb instanceof \wpdb) {
+            return;
+        }
+
         $wpdb->query('ROLLBACK');
         if (is_multisite()) {
             while (ms_is_switched()) {
@@ -441,6 +474,7 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
         remove_filter('wp_die_handler', array($this, 'get_wp_die_handler'));
         $this->_restore_hooks();
         wp_set_current_user(0);
+        $this->requestTimeTearDown();
     }
 
     /**

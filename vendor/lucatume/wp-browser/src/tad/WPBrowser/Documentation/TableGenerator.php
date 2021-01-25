@@ -54,7 +54,7 @@ class TableGenerator implements \PHPDocsMD\TableGenerator
     /**
      * An array of functions added to the output.
      *
-     * @var array
+     * @var array<string>
      */
     protected $index = [];
 
@@ -89,6 +89,8 @@ class TableGenerator implements \PHPDocsMD\TableGenerator
      * prevent this behaviour
      *
      * @param bool $toggle
+     *
+     * @return void
      */
     public function appendExamplesToEndOfTable($toggle)
     {
@@ -97,6 +99,8 @@ class TableGenerator implements \PHPDocsMD\TableGenerator
 
     /**
      * Begin generating a new markdown-formatted table
+     *
+     * @return void
      */
     public function openTable()
     {
@@ -108,6 +112,8 @@ class TableGenerator implements \PHPDocsMD\TableGenerator
      * should be declared as abstract in the table
      *
      * @param bool $toggle
+     *
+     * @return void
      */
     public function doDeclareAbstraction($toggle)
     {
@@ -130,7 +136,7 @@ class TableGenerator implements \PHPDocsMD\TableGenerator
 
         // Skip the method if it's an @internal one.
         $methodFullDoc = (new ReflectionMethod($this->fullClassName, $func->getName()))->getDocComment();
-        foreach (explode(PHP_EOL, $methodFullDoc) as $line) {
+        foreach ((array)explode(PHP_EOL, (string)$methodFullDoc) as $line) {
             if (strpos($line, ' @internal ') !== false) {
                 return '';
             }
@@ -185,6 +191,11 @@ class TableGenerator implements \PHPDocsMD\TableGenerator
         return $toc . PHP_EOL . trim($this->output) . PHP_EOL;
     }
 
+    /**
+     * Builds the table of contents.
+     *
+     * @return string The built table of contents.
+     */
     protected function buildToc()
     {
         if (empty($this->index)) {

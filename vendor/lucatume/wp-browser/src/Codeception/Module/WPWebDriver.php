@@ -1,22 +1,43 @@
 <?php
+/**
+ * An extension of Codeception WebDriver module offering specific WordPress browsing methods.
+ *
+ * @package Codeception\Module
+ */
 
 namespace Codeception\Module;
 
+use Codeception\Exception\ModuleConfigException;
 use Codeception\Exception\ModuleException;
+use Facebook\WebDriver\Cookie as FacebookWebdriverCookie;
+use Symfony\Component\BrowserKit\Cookie;
+use function tad\WPBrowser\requireCodeceptionModules;
+
+//phpcs:disable
+requireCodeceptionModules('WPWebDriver', [ 'WebDriver' ]);
+//phpcs:enable
 
 /**
- * An extension of Codeception WebDriver module offering specific WordPress browsing methods.
+ * Class WPWebDriver
+ *
+ * @package Codeception\Module
  */
 class WPWebDriver extends WebDriver
 {
     use WPBrowserMethods;
+
     /**
      * The module required fields, to be set in the suite .yml configuration file.
      *
-     * @var array
+     * @var array<string>
      */
     protected $requiredFields = ['adminUsername', 'adminPassword', 'adminPath'];
 
+    /**
+     * The login attempts counter.
+     *
+     * @var int
+     */
     protected $loginAttempt = 0;
     /**
      * Login as the administrator user using the credentials specified in the module configuration.
@@ -33,7 +54,9 @@ class WPWebDriver extends WebDriver
      * @param int    $timeout The max time, in seconds, to try to login.
      * @param int    $maxAttempts The max number of attempts to try to login.
      *
-     * @throws \Codeception\Exception\ModuleException If all the attempts of obtaining the cookie fail.
+     * @return void
+     *
+     * @throws ModuleException If all the attempts of obtaining the cookie fail.
      */
     public function loginAsAdmin($timeout = 10, $maxAttempts = 5)
     {
@@ -47,6 +70,7 @@ class WPWebDriver extends WebDriver
      * Depending on the driven browser the login might be "too fast" and the server might have not
      * replied with valid cookies yet; in that case the method will re-attempt the login to obtain
      * the cookies.
+     *
      * @example
      * ```php
      * $I->loginAs('user', 'password');
@@ -59,7 +83,9 @@ class WPWebDriver extends WebDriver
      * @param int    $timeout The max time, in seconds, to try to login.
      * @param int    $maxAttempts The max number of attempts to try to login.
      *
-     * @throws \Codeception\Exception\ModuleException If all the attempts of obtaining the cookie fail.
+     * @throws ModuleException If all the attempts of obtaining the cookie fail.
+     *
+     * @return void
      */
     public function loginAs($username, $password, $timeout = 10, $maxAttempts = 5)
     {
@@ -107,21 +133,21 @@ class WPWebDriver extends WebDriver
      *
      * @param string $cookiePattern The regular expression pattern to use for the matching.
      *
-     * @return array|null An array of cookies matching the pattern.
+     * @return array<FacebookWebdriverCookie|Cookie>|null An array of cookies matching the pattern.
      */
     public function grabCookiesWithPattern($cookiePattern)
     {
+        /** @var array<FacebookWebdriverCookie|Cookie> $cookies */
         $cookies = $this->webDriver->manage()->getCookies();
 
         if (!$cookies) {
             return null;
         }
-        $matchingCookies = array_filter($cookies, function ($cookie) use ($cookiePattern) {
-
-            return preg_match($cookiePattern, $cookie['name']);
+        $matchingCookies = array_filter($cookies, static function ($cookie) use ($cookiePattern) {
+            return preg_match($cookiePattern, $cookie->getName());
         });
-        $cookieList = array_map(function ($cookie) {
-            return sprintf('{"%s": "%s"}', $cookie['name'], $cookie['value']);
+        $cookieList = array_map(static function ($cookie) {
+            return sprintf('{"%s": "%s"}', $cookie->getName(), $cookie->getValue());
         }, $matchingCookies);
 
         $this->debug('Cookies matching pattern ' . $cookiePattern . ' : ' . implode(', ', $cookieList));
@@ -140,10 +166,12 @@ class WPWebDriver extends WebDriver
      * ```
      *
      * @param int $time The max time to wait for AJAX requests to complete.
+     *
+     * @return void
      */
     public function waitForJqueryAjax($time = 10)
     {
-        return $this->waitForJS('return jQuery.active == 0', $time);
+        $this->waitForJS('return jQuery.active == 0', $time);
     }
 
     /**
@@ -155,6 +183,8 @@ class WPWebDriver extends WebDriver
      * $I->amOnPage('/concerts?date=' . $today);
      * $I->assertRegExp('#\\/concerts$#', $I->grabFullUrl());
      * ```
+     *
+     * @return string The full page URL.
      */
     public function grabFullUrl()
     {
@@ -162,7 +192,12 @@ class WPWebDriver extends WebDriver
     }
 
     /**
+     * Validates the module configuration..
+     *
      * @internal
+     *
+     * @return void
+     * @throws ModuleConfigException|ModuleException If there's an issue with the configuration.
      */
     protected function validateConfig()
     {
@@ -188,7 +223,9 @@ class WPWebDriver extends WebDriver
      * $I->deactivatePlugin(['hello-dolly', 'my-plugin']);
      * ```
      *
-     * @param  string|array $pluginSlug The plugin slug, like "hello-dolly", or a list of plugin slugs.
+     * @param  string|array<string> $pluginSlug The plugin slug, like "hello-dolly", or a list of plugin slugs.
+     *
+     * @return void
      */
     public function deactivatePlugin($pluginSlug)
     {
@@ -219,7 +256,9 @@ class WPWebDriver extends WebDriver
      * $I->activatePlugin(['hello-dolly','another-plugin']);
      * ```
      *
-     * @param  string|array $pluginSlug The plugin slug, like "hello-dolly" or a list of plugin slugs.
+     * @param  string|array<string> $pluginSlug The plugin slug, like "hello-dolly" or a list of plugin slugs.
+     *
+     * @return void
      */
     public function activatePlugin($pluginSlug)
     {
