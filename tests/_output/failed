@@ -1,1 +1,1 @@
-tests/acceptance/BrowserCept.php
+tests/acceptance/NoPendingChangeCept.php

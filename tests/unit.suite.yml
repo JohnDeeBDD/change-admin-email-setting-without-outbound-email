@@ -1,0 +1,21 @@
+actor: UnitTester
+modules:
+    enabled:
+        - WPLoader
+        - WPQueries
+        - Asserts
+    config:
+        WPLoader:
+            wpRootFolder: /var/www/html
+            #wpRootFolder: //Applications/MAMP/htdocs
+            dbName: wordpress_unit_test
+            dbHost: localhost
+            dbUser: wordpressuser
+            dbPassword: password
+            tablePrefix: wp_
+            domain: localhost
+            adminEmail: admin@localhost
+            title: WP Tests
+            plugins: []
+            activatePlugins: []
+            bootstrapActions: []

@@ -7,7 +7,7 @@ $I->amOnPage("/wp-admin/options-general.php");
 
 $formFieldName = "new_admin_email";
 $startingEmail = $I->grabValueFrom($formFieldName);
-$testEmails = array("email1@test.dev", "email2@test.dev");
+$testEmails = array(" ", "email2@test.dev");
     
 foreach($testEmails as $email){
     $I->fillField($formFieldName, $email);

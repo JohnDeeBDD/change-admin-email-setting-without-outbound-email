@@ -10,6 +10,15 @@
 
 namespace ChangeAdminEmail;
 
+if(isset($_GET['ChangeAdmineEmail-reset'])){
+    //$x = shell_exec("/var/www/html/wp option get siteurl");
+    $output = shell_exec('wp option get siteurl');
+// Display the list of all file
+// and directory
+    echo "<pre>$output</pre>";
+    die("xxx");
+}
+
 $ChangeAdminEmailPlugin = new ChangeAdminEmailPlugin;
 $ChangeAdminEmailPlugin->run();
 
@@ -22,12 +31,17 @@ class ChangeAdminEmailPlugin{
         return;
     }
 
+    //In the case that the admin has requested a pending email change BEFORE they activated the plugin,
+    //and they have not actually clicked the email, or couldn't receive it for whatever reason,
+    //then there will still be a "pending email change". This function kills the pending change.
+    public function removePendingEmail(){
+        delete_option("adminhash");
+        delete_option("new_admin_email");
+    }
+
     public function run(){
+        add_action('init', array($this, 'removePendingEmail'));
         add_action('admin_notices', [new AdminNotice(), 'displayAdminNotice']);
-        if(isset($_POST['change-admin-email-test-email-nonce'])){
-            add_action('init', array($this, 'verifyNonce'));
-            add_action('init', array($this, 'testEmail'));
-        }
 
         remove_action( 'add_option_new_admin_email', 'update_option_new_admin_email' );
         remove_action( 'update_option_new_admin_email', 'update_option_new_admin_email' );
@@ -36,26 +50,24 @@ class ChangeAdminEmailPlugin{
         //this filter overides this:
         add_filter('send_site_admin_email_change_email', function(){return FALSE;}, 10, 3 );
 
-        //hooks our own custom method to update the email
+        if(isset($_POST['change-admin-email-test-email-nonce'])){
+            add_action('init', array($this, 'verifyNonce'));
+            add_action('init', array($this, 'testEmail'));
+            //hooks our own custom method to update the email
+
+        }
         add_action( 'add_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
         add_action( 'update_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
 
-        //this fixes the text in English. Translators wanted for other languages.
-        add_action('wp_after_admin_bar_render', array($this, 'modifyOptionsGeneralPHPForm'));
-
+        add_action('wp_after_admin_bar_render', array($this, 'modifyOptionsGeneralForm'));
     }
-    
+
     public function testEmail(){
         $email = $_POST['new_admin_email'];
         $domain = site_url();
         $url = "https://generalchicken.guru/wp-json/change-admin-email-plugin/v1/test-email";
         $response = wp_remote_post( $url, array(
                 'method'      => 'POST',
-                'timeout'     => 45,
-                'redirection' => 5,
-                'httpversion' => '1.0',
-                'blocking'    => true,
-                'headers'     => array(),
                 'body'        => array(
                     'email' => $email,
                     'domain' => $domain
@@ -70,7 +82,7 @@ class ChangeAdminEmailPlugin{
     }
 
     //Changes the form on admin area options-general.php. Doesn't do anything unless on this page.
-    public function modifyOptionsGeneralPHPForm(){
+    public function modifyOptionsGeneralForm(){
         if (function_exists('get_current_screen')) {
 		    $screen = get_current_screen();
 		    if($screen->base == "options-general"){
