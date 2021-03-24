@@ -215,7 +215,7 @@
      <li> <a href="#" title="Incomplete" onClick="toggleScenarios('scenarioIncomplete', this.parentElement)"><strong>I</strong> 0</a></li>
    </ul>
  <div class="layout">
- <h1>Codeception Results <small><span style="color: #e74c3c">FAILED</span> (8.7s)</small></h1>
+ <h1>Codeception Results <small><span style="color: #e74c3c">FAILED</span> (7.5s)</small></h1>
 
 
 
@@ -227,7 +227,7 @@
 </tr>   <tr class="scenarioRow scenarioSuccess">
     <td>
      <p class="scenarioSuccess" onclick="showHide('1', this)"><span class="toggle">+</span>
-          <span class="quiet">BrowserCept &raquo;</span> See that the browser can launch <span style="color: #34495e; font-size: 70%;">3.14s</span></p>
+          <span class="quiet">BrowserCept &raquo;</span> See that the browser can launch <span style="color: #34495e; font-size: 70%;">2.39s</span></p>
     </td>
    </tr>
    <tr class="scenarioRow scenarioSuccess">
@@ -257,7 +257,7 @@
    <tr class="scenarioRow scenarioSuccess">
     <td>
      <p class="scenarioSuccess" onclick="showHide('2', this)"><span class="toggle">+</span>
-          <span class="quiet">ChangeAdminEmailCept &raquo;</span>  <span style="color: #34495e; font-size: 70%;">3.42s</span></p>
+          <span class="quiet">ChangeAdminEmailCept &raquo;</span>  <span style="color: #34495e; font-size: 70%;">2.95s</span></p>
     </td>
    </tr>
    <tr class="scenarioRow scenarioSuccess">
@@ -278,7 +278,7 @@
       </tr>
 
       <tr>
-       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I fill field <span style="color: #732E81">&quot;new_admin_email&quot;,&quot;email1@test.dev&quot;</span></td>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I fill field <span style="color: #732E81">&quot;new_admin_email&quot;,&quot;email@email.com&quot;</span></td>
       </tr>
 
       <tr>
@@ -290,7 +290,7 @@
       </tr>
 
       <tr>
-       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I assert equals <span style="color: #732E81">&quot;email1@test.dev&quot;,&quot;email1@test.dev&quot;</span></td>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I assert equals <span style="color: #732E81">&quot;email@email.com&quot;,&quot;email@email.com&quot;</span></td>
       </tr>
 
       <tr>
@@ -310,7 +310,7 @@
       </tr>
 
       <tr>
-       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I fill field <span style="color: #732E81">&quot;new_admin_email&quot;,&quot;jiminac@aol.com&quot;</span></td>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I fill field <span style="color: #732E81">&quot;new_admin_email&quot;,&quot;email@email.com&quot;</span></td>
       </tr>
 
       <tr>
@@ -322,7 +322,7 @@
       </tr>
 
       <tr>
-       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I assert equals <span style="color: #732E81">&quot;jiminac@aol.com&quot;,&quot;jiminac@aol.com&quot;</span></td>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I assert equals <span style="color: #732E81">&quot;email@email.com&quot;,&quot;email@email.com&quot;</span></td>
       </tr>
 
 
@@ -339,7 +339,7 @@
    <tr class="scenarioRow scenarioFailed">
     <td>
      <p class="scenarioFailed" onclick="showHide('3', this)"><span class="toggle">+</span>
-          <span class="quiet">NoPendingChangeCept &raquo;</span>  <span style="color: #34495e; font-size: 70%;">2.18s</span></p>
+          <span class="quiet">NoPendingChangeCept &raquo;</span>  <span style="color: #34495e; font-size: 70%;">2.14s</span></p>
     </td>
    </tr>
    <tr class="scenarioRow scenarioFailed">
@@ -376,7 +376,7 @@
       </tr>
 
       <tr>
-       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I assert not false <span style="color: #732E81">{&quot;hash&quot;:&quot;d7e737542ffdc3f5f7d69cba730dddf9&quot;,&quot;newemail&quot;:&quot;newemail@test.com&quot;}</span></td>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I assert not false <span style="color: #732E81">{&quot;hash&quot;:&quot;33e662617153806343fb9547e78bcdcb&quot;,&quot;newemail&quot;:&quot;newemail@test.com&quot;}</span></td>
       </tr>
 
       <tr>
@@ -400,7 +400,7 @@
       </tr>
 
       <tr>
-       <td class="stepName failedStep">&nbsp;&nbsp;&nbsp;&nbsp;I assert false <span style="color: #732E81">{&quot;hash&quot;:&quot;d7e737542ffdc3f5f7d69cba730dddf9&quot;,&quot;newemail&quot;:&quot;newemail@test.com&quot;},&quot;getting this option should return 'false', because it should be non-existent!&quot;</span></td>
+       <td class="stepName failedStep">&nbsp;&nbsp;&nbsp;&nbsp;I assert false <span style="color: #732E81">{&quot;hash&quot;:&quot;33e662617153806343fb9547e78bcdcb&quot;,&quot;newemail&quot;:&quot;newemail@test.com&quot;},&quot;getting this option should return 'false', because it should be non-existent!&quot;</span></td>
       </tr>
 
 
@@ -408,7 +408,7 @@
     <td class="error">
         getting this option should return 'false', because it should be non-existent!<br />
 Failed asserting that Array &amp;0 (<br />
-    'hash' =&gt; 'd7e737542ffdc3f5f7d69cba730dddf9'<br />
+    'hash' =&gt; '33e662617153806343fb9547e78bcdcb'<br />
     'newemail' =&gt; 'newemail@test.com'<br />
 ) is false.
     </td>
