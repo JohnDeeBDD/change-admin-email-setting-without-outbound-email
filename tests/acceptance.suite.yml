@@ -25,11 +25,11 @@ modules:
       #populator: 'mysql -u $user -ppassword -h $host $dbname < $dump'
       populator: 'curl http://ec2-3-135-1-128.us-east-2.compute.amazonaws.com/?reset=true'
       #url: 'http://ec2-13-59-196-39.us-east-2.compute.amazonaws.com/'
-      url: 'http://localhost/'
+      url: 'http://3.15.227.180/'
       tablePrefix: wp_
     WPWebDriver:
       #url: 'http://ec2-13-59-196-39.us-east-2.compute.amazonaws.com/'
-      url: 'http://localhost/'
+      url: 'http://3.15.227.180/'
       #window_size: 1600, 960
       window_size: maximize
       adminUsername: 'Codeception'
