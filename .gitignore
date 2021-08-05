@@ -3,3 +3,5 @@
 /bin/
 composer.lock
 /tests/_output/
+.idea
+/.idea/
