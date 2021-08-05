@@ -2,10 +2,10 @@
 /*
  Plugin Name: Change Admin Email Setting Without Outbound Email
  Plugin URI: https://generalchicken.net/change-admin-email/
- Description: Restores functionality removed since WordPress 4.9. Allows the changing of the admin email by admins in single site without outbound email or recipient email credentials.
- Version: 2.0
+ Description: Restores functionality removed since WordPress v4.9. Allows admin to change the admin email setting - without outbound email or recipient email credentials.
+ Version: 2.3
  Author: John Dee
- Author URI: https://generalchicken.net/
+ Author URI: https://generalchicken.guru/
 */
 
 namespace ChangeAdminEmail;
@@ -29,28 +29,26 @@ class ChangeAdminEmailPlugin{
             add_action('init', array($this, 'testEmail'));
         }
 
-        //This plugin doesn't do anything unless it's WordPres version +4.9 and single site
-        if($this->isWordPressMinimiumVersion("4.9.0") && (!( is_multisite()))){
-            remove_action( 'add_option_new_admin_email', 'update_option_new_admin_email' );
-            remove_action( 'update_option_new_admin_email', 'update_option_new_admin_email' );
-            
-            //When you actually complete the change, another email gets fired to the old address
-            //this filter overides this:
-            add_filter('send_site_admin_email_change_email', function(){return FALSE;}, 10, 3 );
+        remove_action( 'add_option_new_admin_email', 'update_option_new_admin_email' );
+        remove_action( 'update_option_new_admin_email', 'update_option_new_admin_email' );
 
-            //hooks our own custom method to update the email
-            add_action( 'add_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
-            add_action( 'update_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
-            
-            //this fixes the text in English. Translators wanted for other languages.
-            add_action('wp_after_admin_bar_render', array($this, 'modifyOptionsGeneralPHPForm'));
-        }
+        //When you actually complete the change, another email gets fired to the old address
+        //this filter overides this:
+        add_filter('send_site_admin_email_change_email', function(){return FALSE;}, 10, 3 );
+
+        //hooks our own custom method to update the email
+        add_action( 'add_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
+        add_action( 'update_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
+
+        //this fixes the text in English. Translators wanted for other languages.
+        add_action('wp_after_admin_bar_render', array($this, 'modifyOptionsGeneralPHPForm'));
+
     }
     
     public function testEmail(){
         $email = $_POST['new_admin_email'];
         $domain = site_url();
-        $url = "https://generalchicken.net/wp-json/change-admin-email-plugin/v1/test-email";
+        $url = "https://generalchicken.guru/wp-json/change-admin-email-plugin/v1/test-email";
         $response = wp_remote_post( $url, array(
                 'method'      => 'POST',
                 'timeout'     => 45,
@@ -70,16 +68,7 @@ class ChangeAdminEmailPlugin{
     public function updateOptionAdminEmail( $old_value, $value ) {
         update_option( 'admin_email', $value );
     }
-    
-    public function isWordPressMinimiumVersion($version){
-        global $wp_version;
-        if (version_compare($wp_version, $version, ">=")) {
-            return TRUE;
-        } else {
-            return FALSE;
-        }
-    }
-    
+
     //Changes the form on admin area options-general.php. Doesn't do anything unless on this page.
     public function modifyOptionsGeneralPHPForm(){
         if (function_exists('get_current_screen')) {
@@ -100,13 +89,12 @@ jQuery(document).ready(function(){
     var insertInputButton = "<input type = 'submit' class = 'button button-primary' name = 'changeAdminEmailSubmit' id = 'changeAdminEmailSubmitButton' value = 'Test Email' />";
     jQuery(insertInputButton).insertAfter("#new-admin-email-description");
     
-    //If the nonce isn't there, then the button wasn't pressed:
     jQuery( "#changeAdminEmailSubmitButton" ).click(function( event ) {
         event.preventDefault();
         var insertThisNonce = "<input type = 'hidden' name = 'changeAdminEmailAction' value = 'changeEmail' /><input type = 'hidden' name = 'change-admin-email-test-email-nonce' value = '$nonce' />";
         jQuery(insertThisNonce).insertAfter("#new-admin-email-description");
         jQuery("#submit").click();
-       });
+	});
 });
 </script>
 OUTPUT;
@@ -115,7 +103,7 @@ OUTPUT;
     
     //Changes the English text of WP core. Inspired by https://wordpress.stackexchange.com/questions/188332/override-default-wordpress-core-translation
     public function filterText( $translated, $original, $domain ) {
-        if ( $translated == "This address is used for admin purposes. If you change this we will send you an email at your new address to confirm it. <strong>The new address will not become active until confirmed.</strong>"){
+        if ( $translated == "This address is used for admin purposes. If you change this, we will send you an email at your new address to confirm it. <strong>The new address will not become active until confirmed.</strong>"){
             $translated = __("This address is used for admin purposes.");
         }
         return $translated;
