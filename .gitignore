@@ -1,1 +1,5 @@
 /tests/acceptance.suite.yml
+/vendor/
+/bin/
+composer.lock
+/tests/_output/
