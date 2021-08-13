@@ -3,7 +3,7 @@
  Plugin Name: Change Admin Email Setting Without Outbound Email
  Plugin URI: https://generalchicken.guru/change-admin-email/
  Description: Restores functionality removed since WordPress v4.9. Allows admin to change the admin email setting - without outbound email or recipient email credentials.
- Version: 301
+ Version: 3.0
  Author: John Dee
  Author URI: https://generalchicken.guru/
 */
@@ -37,17 +37,16 @@ class ChangeAdminEmailPlugin{
         remove_action( 'add_option_new_admin_email', 'update_option_new_admin_email' );
         remove_action( 'update_option_new_admin_email', 'update_option_new_admin_email' );
 
-        //When you actually complete the change, another email gets fired to the old address
-        //this filter overrides this:
+        //The default WP functionality is to send a confirmation email. This filter overrides the default behavior:
         add_filter('send_site_admin_email_change_email', function(){return FALSE;}, 10, 3 );
 
         //At this point, the only reason our nonce should be submitted, is that the user is requesting us to send
-	    //them an email. We must check the nonce first before this action is completed:
+	    //an email. We must check the nonce first before this action is completed:
         if(isset($_POST['change-admin-email-test-email-nonce'])){
-            add_action('init', array($this, 'verifyNonce'));
-            add_action('init', array($this, 'testEmail'));
-            //hooks our own custom method to update the email
+        	add_action('init', array($this, 'verifyNonce'));
 
+            //hooks our own custom method to update the email:
+	        add_action('init', array($this, 'testEmail'));
         }
         add_action( 'add_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
         add_action( 'update_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );

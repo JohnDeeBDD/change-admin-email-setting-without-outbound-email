@@ -16,3 +16,5 @@ $ChangeAdminEmailMothership->enableTestEmailRoute();
 
 $SettingsPage = new SettingsPage;
 $SettingsPage->enable();
+
+//https://plugins.svn.wordpress.org/change-admin-email-setting-without-outbound-email
