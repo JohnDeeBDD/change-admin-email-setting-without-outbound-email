@@ -1,8 +1,8 @@
 <?php
 /*
- Plugin Name: Change Admin Email Mothership
+ Plugin Name: Mothership Change Admin Email
  Plugin URI: https://generalchicken.guru/
- Version: 99
+ Version: 999
  Author: John Dee
  Author URI: https://generalchicken.guru/
 */
