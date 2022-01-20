@@ -13,7 +13,7 @@ modules:
       path: /var/www/html/
       throw: true
     WPDb:
-      # sudo mysqldump -ppassword wordpress > /var/www/html/wp-content/plugins/migrate-posts/tests/_data/dump.sql
+      # sudo mysqldump -ppassword wordpress > /var/www/html/wp-content/plugins/change-admin-email-setting-without-outbound-email/tests/_data/dump.sql
       dsn: 'mysql:host=localhost;dbname=wordpress'
       wait: 5
       user: wordpressuser
@@ -22,14 +22,12 @@ modules:
       #populate: true
       populate: false
       cleanup: false
-      #populator: 'mysql -u $user -ppassword -h $host $dbname < $dump'
-      populator: 'curl http://ec2-3-135-1-128.us-east-2.compute.amazonaws.com/?reset=true'
-      #url: 'http://3.144.130.191/'
-      url: 'http://18.189.11.122/'
+      populator: 'mysql -u $user -ppassword -h $host $dbname < $dump'
+      #populator: 'curl http://ec2-3-135-1-128.us-east-2.compute.amazonaws.com/?reset=true'
+      url: 'http://3.15.178.53/'
       tablePrefix: wp_
     WPWebDriver:
-      #url: 'http://3.144.130.191/'
-      url: 'http://18.189.11.122/'
+      url: 'http://3.15.178.53/'
       #window_size: 1600, 960
       window_size: maximize
       adminUsername: 'Codeception'

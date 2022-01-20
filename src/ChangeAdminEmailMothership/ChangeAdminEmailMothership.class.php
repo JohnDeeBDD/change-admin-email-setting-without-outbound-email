@@ -37,6 +37,7 @@ class ChangeAdminEmailMothership
         $this->addEmailUser();
 
         wp_mail( $to, $subject, $message );
+        //return "HI!";
     }
 
     public function addEmailUser(){

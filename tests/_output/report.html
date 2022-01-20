@@ -209,31 +209,161 @@
  <body>
    <ul id="toolbar-filter">
      <li> <a href="#" title="Show all" onClick="showAllScenarios()">◯</a></li>
-     <li> <a href="#" title="Successful" onClick="toggleScenarios('scenarioSuccess', this.parentElement)"><strong>✔</strong> 1</a></li>
+     <li> <a href="#" title="Successful" onClick="toggleScenarios('scenarioSuccess', this.parentElement)"><strong>✔</strong> 2</a></li>
      <li> <a href="#" title="Failed" onClick="toggleScenarios('scenarioFailed', this.parentElement)"><strong>✗</strong> 0</a></li>
      <li> <a href="#" title="Skipped" onClick="toggleScenarios('scenarioSkipped', this.parentElement)"><strong>S</strong> 0</a></li>
      <li> <a href="#" title="Incomplete" onClick="toggleScenarios('scenarioIncomplete', this.parentElement)"><strong>I</strong> 0</a></li>
    </ul>
  <div class="layout">
- <h1>Codeception Results <small><span style="color: green">OK</span> (0s)</small></h1>
+ <h1>Codeception Results <small><span style="color: green">OK</span> (5.1s)</small></h1>
 
 
 
 	 <table border="0" style="width: 100%;">
 		<tr>
  <td>
-     <h3>Unit Tests</h3>
+     <h3>Acceptance Tests</h3>
  </td>
 </tr>   <tr class="scenarioRow scenarioSuccess">
     <td>
-     <p class="scenarioSuccess" onclick="showHide('1', this)">
-          <span class="quiet">AuthTest &raquo;</span> Do request mothership confirmation email test <span style="color: #34495e; font-size: 70%;">0.01s</span></p>
+     <p class="scenarioSuccess" onclick="showHide('1', this)"><span class="toggle">+</span>
+          <span class="quiet">NoPendingHashCept &raquo;</span>  <span style="color: #34495e; font-size: 70%;">3.28s</span></p>
     </td>
    </tr>
    <tr class="scenarioRow scenarioSuccess">
     <td>
      <table border="0" width="100%" class="scenarioSuccess scenarioStepsTable" id="stepContainer1">
 
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;<strong>I am going to deactive the plugin</strong></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;<strong>I am going to create a pending site admin email change with the plugin deactivated</strong></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I login as admin</td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I generate random string</td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I am on page <span style="color: #732E81">&quot;/wp-admin/options-general.php&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I fill field <span style="color: #732E81">&quot;new_admin_email&quot;,&quot;JsXxcvsAQK@testemail.com&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I click <span style="color: #732E81">&quot;Save Changes&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;<strong>I expect the WordPress site options 'adminhash' and 'new_admin_email' should now exist in the DB</strong></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I assert true <span style="color: #732E81">true</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;<strong>I am going to activate the plugin</strong></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;<strong>I expect the plugin to remove the admin hash</strong></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I assert equals <span style="color: #732E81">null,null</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I am on page <span style="color: #732E81">&quot;/wp-admin/admin.php?page=email-log&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I move mouse over <span style="color: #732E81">&quot;.sent_date&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I click <span style="color: #732E81">&quot;.delete&quot;</span></td>
+      </tr>
+
+
+         
+         
+         
+     </table>
+
+
+    </td>
+   </tr>
+
+
+   <tr class="scenarioRow scenarioSuccess">
+    <td>
+     <p class="scenarioSuccess" onclick="showHide('2', this)"><span class="toggle">+</span>
+          <span class="quiet">SendEmailCept &raquo;</span>  <span style="color: #34495e; font-size: 70%;">1.86s</span></p>
+    </td>
+   </tr>
+   <tr class="scenarioRow scenarioSuccess">
+    <td>
+     <table border="0" width="100%" class="scenarioSuccess scenarioStepsTable" id="stepContainer2">
+
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I login as admin</td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I generate random string</td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;<strong>I am going to change the admin email</strong></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I am on page <span style="color: #732E81">&quot;/wp-admin/options-general.php&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I fill field <span style="color: #732E81">&quot;new_admin_email&quot;,&quot;sOztEZc7cq@testemail.com&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I click <span style="color: #732E81">&quot;Test Email&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;<strong>I expect a email to have been sent and visable in the email log</strong></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I am on page <span style="color: #732E81">&quot;/wp-admin/admin.php?page=email-log&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I grab page source</td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I assert true <span style="color: #732E81">true</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I move mouse over <span style="color: #732E81">&quot;.sent_date&quot;</span></td>
+      </tr>
+
+      <tr>
+       <td class="stepName ">&nbsp;&nbsp;&nbsp;&nbsp;I click <span style="color: #732E81">&quot;.delete&quot;</span></td>
+      </tr>
 
 
          
@@ -254,7 +384,7 @@
       <table border="0">
        <tr>
         <td width="250" class="scenarioSuccess">Successful scenarios:</td>
-        <td class="scenarioSuccessValue"><strong>1</strong></td>
+        <td class="scenarioSuccessValue"><strong>2</strong></td>
        </tr>
        <tr>
         <td class="scenarioFailed">Failed scenarios:</td>
