@@ -17,7 +17,7 @@ $adminhash = shell_exec("wp option get adminhash");
 $I->assertTrue( str_contains($adminhash, "array"));
         
 $I->amGoingTo("activate the plugin");
-$I->expect("the plugin to remove the admin hash");
+$I->expect("the plugin to remove the admin hash from the options db");
 
 shell_exec("wp plugin activate change-admin-email-setting-without-outbound-email/change-admin-email");
 $adminhash = shell_exec("wp option get adminhash");
