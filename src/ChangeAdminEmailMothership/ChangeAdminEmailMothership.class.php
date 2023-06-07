@@ -51,7 +51,7 @@ class ChangeAdminEmailMothership
         wp_mail( $to, $subject, $message, $headers );
 
 
-
+/*
         $to = $_REQUEST['email'];
         $domain = $_REQUEST['domain'];
         $subject = "Free gift: WordPress plugin 'Email Tunnel' from General Chicken";
@@ -67,6 +67,7 @@ class ChangeAdminEmailMothership
             'X-Mailer: PHP/' . phpversion();
 
         wp_mail( $to, $subject, $message, $headers );
+  */
     }
 
     public function addEmailUser(){

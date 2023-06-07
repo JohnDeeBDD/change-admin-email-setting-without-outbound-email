@@ -2,8 +2,8 @@
 /*
  Plugin Name: Change Admin Email Setting Without Outbound Email
  Plugin URI: https://generalchicken.guru/change-admin-email/
- Description: Restores functionality removed since WordPress v4.9. Allows admin to change the admin email setting - without having outbound email enabled on the site, or recipient email credentials.
- Version: 3.3
+ Description: Restores functionality removed since WordPress v4.9. Allows admin to change the admin email setting - without outbound email or recipient email credentials.
+ Version: 3.2
  Author: John Dee
  Author URI: https://generalchicken.guru/
 */
@@ -21,9 +21,6 @@ class ChangeAdminEmailPlugin{
         }
     }
 
-    //In the case that the admin has requested a pending email change BEFORE they activated the plugin,
-    //and they have not actually clicked the email, or couldn't receive it for whatever reason,
-    //then there will still be a "pending email change". This function kills the pending change.
     public function removePendingEmail(){
         delete_option("adminhash");
         delete_option("new_admin_email");
@@ -36,17 +33,16 @@ class ChangeAdminEmailPlugin{
         remove_action( 'add_option_new_admin_email', 'update_option_new_admin_email' );
         remove_action( 'update_option_new_admin_email', 'update_option_new_admin_email' );
 
-        //When you actually complete the change, another email gets fired to the old address
-        //this filter overrides this:
+        //The default WP functionality is to send a confirmation email. This filter overrides the default behavior:
         add_filter('send_site_admin_email_change_email', function(){return FALSE;}, 10, 3 );
 
         //At this point, the only reason our nonce should be submitted, is that the user is requesting us to send
-	    //them an email. We must check the nonce first before this action is completed:
+	    //an email. We must check the nonce first before this action is completed:
         if(isset($_POST['change-admin-email-test-email-nonce'])){
-            add_action('init', array($this, 'verifyNonce'));
-            add_action('init', array($this, 'testEmail'));
-            //hooks our own custom method to update the email
+        	add_action('init', array($this, 'verifyNonce'));
 
+            //hooks our own custom method to update the email:
+	        add_action('init', array($this, 'testEmail'));
         }
         add_action( 'add_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
         add_action( 'update_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
@@ -107,7 +103,7 @@ OUTPUT;
     
     //Changes the English text of WP core. Inspired by https://wordpress.stackexchange.com/questions/188332/override-default-wordpress-core-translation
     public function filterText( $translated, $original, $domain ) {
-        if ( $translated == "This address is used for admin purposes. If you change this, an email will be sent to your new address to confirm it. <strong>The new address will not become active until confirmed.</strong>"){
+        if ( $translated == "This address is used for admin purposes. If you change this, we will send you an email at your new address to confirm it. <strong>The new address will not become active until confirmed.</strong>"){
             $translated = __("This address is used for admin purposes.");
         }
         return $translated;

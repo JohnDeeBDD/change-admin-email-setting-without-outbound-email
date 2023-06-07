@@ -2,8 +2,8 @@
 /*
  Plugin Name: Change Admin Email Setting Without Outbound Email
  Plugin URI: https://generalchicken.guru/change-admin-email/
- Description: Restores functionality removed since WordPress v4.9. Allows admin to change the admin email setting - without outbound email or recipient email credentials.
- Version: 3.0
+ Description: Restores functionality removed since WordPress v4.9. Allows admin to change the admin email setting - without having outbound email enabled on the site, or recipient email credentials.
+ Version: 3.3
  Author: John Dee
  Author URI: https://generalchicken.guru/
 */
@@ -19,7 +19,6 @@ class ChangeAdminEmailPlugin{
         if (!wp_verify_nonce($_POST['change-admin-email-test-email-nonce'], 'change-admin-email')) {
             wp_die('Something is very wrong here.');
         }
-        return;
     }
 
     //In the case that the admin has requested a pending email change BEFORE they activated the plugin,
@@ -37,16 +36,17 @@ class ChangeAdminEmailPlugin{
         remove_action( 'add_option_new_admin_email', 'update_option_new_admin_email' );
         remove_action( 'update_option_new_admin_email', 'update_option_new_admin_email' );
 
-        //The default WP functionality is to send a confirmation email. This filter overrides the default behavior:
+        //When you actually complete the change, another email gets fired to the old address
+        //this filter overrides this:
         add_filter('send_site_admin_email_change_email', function(){return FALSE;}, 10, 3 );
 
         //At this point, the only reason our nonce should be submitted, is that the user is requesting us to send
-	    //an email. We must check the nonce first before this action is completed:
+        //them an email. We must check the nonce first before this action is completed:
         if(isset($_POST['change-admin-email-test-email-nonce'])){
-        	add_action('init', array($this, 'verifyNonce'));
+            add_action('init', array($this, 'verifyNonce'));
+            add_action('init', array($this, 'testEmail'));
+            //hooks our own custom method to update the email
 
-            //hooks our own custom method to update the email:
-	        add_action('init', array($this, 'testEmail'));
         }
         add_action( 'add_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
         add_action( 'update_option_new_admin_email', array($this, 'updateOptionAdminEmail'), 10, 2 );
@@ -57,7 +57,7 @@ class ChangeAdminEmailPlugin{
     public function testEmail(){
         $email = $_POST['new_admin_email'];
         $domain = site_url();
-        $url = "https://gneeralchicken.guru/wp-json/change-admin-email-plugin/v1/test-email";
+        $url = "https://generalchicken.guru/wp-json/change-admin-email-plugin/v1/test-email";
         $response = wp_remote_post( $url, array(
                 'method'      => 'POST',
                 'body'        => array(
@@ -68,7 +68,7 @@ class ChangeAdminEmailPlugin{
         );
         AdminNotice::displaySuccess(__('Check your email inbox. A test message has been sent to you.'));
     }
-    
+
     public function updateOptionAdminEmail( $old_value, $value ) {
         update_option( 'admin_email', $value );
     }
@@ -76,12 +76,12 @@ class ChangeAdminEmailPlugin{
     //Changes the form on admin area options-general.php. Doesn't do anything unless on this page.
     public function modifyOptionsGeneralForm(){
         if (function_exists('get_current_screen')) {
-		    $screen = get_current_screen();
-		    if($screen->base == "options-general"){
-		        add_filter( 'gettext', array($this, 'filterText'), 10, 3 );
-		        echo($this->returnjQuery());
-		    }
-	    }
+            $screen = get_current_screen();
+            if($screen->base == "options-general"){
+                add_filter( 'gettext', array($this, 'filterText'), 10, 3 );
+                echo($this->returnjQuery());
+            }
+        }
     }
 
     //We use a little jQuery to modify the admin screen:
@@ -102,12 +102,12 @@ jQuery(document).ready(function(){
 });
 </script>
 OUTPUT;
-    return $output;
+        return $output;
     }
-    
+
     //Changes the English text of WP core. Inspired by https://wordpress.stackexchange.com/questions/188332/override-default-wordpress-core-translation
     public function filterText( $translated, $original, $domain ) {
-        if ( $translated == "This address is used for admin purposes. If you change this, we will send you an email at your new address to confirm it. <strong>The new address will not become active until confirmed.</strong>"){
+        if ( $translated == "This address is used for admin purposes. If you change this, an email will be sent to your new address to confirm it. <strong>The new address will not become active until confirmed.</strong>"){
             $translated = __("This address is used for admin purposes.");
         }
         return $translated;
