@@ -86,17 +86,25 @@ class ChangeAdminEmailMothership
         return;
     }
 
-    public function isBlackListed($emailFragment){
-        $blackList = get_option( 'generalchicken-blacklist');
+public function isBlackListed($emailFragment){
+    // Get the blacklist option
+    $blackList = get_option( 'generalchicken-blacklist');
 
-
-        foreach($blackList as $blackItem) {
-            if (strpos($emailFragment, $blackItem) !== false) {
-                return TRUE;
-            }
-        }
-        return FALSE;
+    // Check if email ends with '.ru'
+    if (substr($emailFragment, -3) === '.ru') {
+        return TRUE;
     }
+
+    // Check if the email matches any item in the blacklist
+    foreach($blackList as $blackItem) {
+        if (strpos($emailFragment, $blackItem) !== false) {
+            return TRUE;
+        }
+    }
+
+    // If no match, return FALSE
+    return FALSE;
+}
 
     public function getUsernameFromEmail($email){
         $parts = explode("@", $email);
